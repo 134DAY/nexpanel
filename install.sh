@@ -88,6 +88,32 @@ php artisan key:generate --force
 touch database/database.sqlite
 php artisan migrate --seed --force
 php artisan storage:link || true
+
+# Provision a dedicated MySQL admin user so the Database Manager works
+# out of the box (root uses auth_socket and can't be reached over TCP).
+if command -v mysql >/dev/null; then
+    systemctl start mysql 2>/dev/null || true
+    DBPW="$(openssl rand -hex 16)"
+    if mysql <<SQL 2>/dev/null
+CREATE USER IF NOT EXISTS 'nexpanel'@'127.0.0.1' IDENTIFIED BY '${DBPW}';
+GRANT ALL PRIVILEGES ON *.* TO 'nexpanel'@'127.0.0.1' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+SQL
+    then
+        sed -i '/^#\? *DB_ADMIN_/d' .env
+        cat >> .env <<ENV
+DB_ADMIN_HOST=127.0.0.1
+DB_ADMIN_PORT=3306
+DB_ADMIN_USER=nexpanel
+DB_ADMIN_PASSWORD=${DBPW}
+ENV
+        log "MySQL admin user 'nexpanel' created for the Database Manager"
+    else
+        warn "Could not create MySQL admin user — set DB_ADMIN_* in .env manually."
+    fi
+fi
+
+# Cache config AFTER .env is final (env() is unavailable once cached).
 php artisan config:cache
 php artisan route:cache
 

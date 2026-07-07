@@ -8,12 +8,9 @@ use Illuminate\Support\Facades\Process;
 
 class SSLController extends Controller
 {
-    private string $liveDir    = '/etc/letsencrypt/live';
-    private string $renewalDir = '/etc/letsencrypt/renewal';
-
     public function index()
     {
-        $available = $this->available();
+        $available = $this->certbotExists();
         $certs = $available ? $this->scanCertificates() : [];
 
         $stats = [
@@ -27,7 +24,7 @@ class SSLController extends Controller
             'certs'         => $certs,
             'stats'         => $stats,
             'available'     => $available,
-            'certbotExists' => $this->certbotExists(),
+            'certbotExists' => $available,
             'isMock'        => false,
         ]);
     }
@@ -42,7 +39,7 @@ class SSLController extends Controller
         }
 
         $useNginx = trim(Process::run('command -v nginx')->output()) !== '';
-        $args = ['certbot', $useNginx ? '--nginx' : 'certonly', '-d', $data['domain'],
+        $args = [...$this->sudo(), 'certbot', $useNginx ? '--nginx' : 'certonly', '-d', $data['domain'],
             '-n', '--agree-tos', '--register-unsafely-without-email'];
         if (! $useNginx) {
             $args[] = '--standalone';
@@ -62,7 +59,7 @@ class SSLController extends Controller
         if (! $this->certbotExists()) {
             return back()->with('error', 'certbot is not installed.');
         }
-        $result = Process::timeout(180)->run(['certbot', 'renew', '--cert-name', $data['domain']]);
+        $result = Process::timeout(180)->run([...$this->sudo(), 'certbot', 'renew', '--cert-name', $data['domain']]);
         ActivityLogger::log('ssl.renew', "Renewed certificate {$data['domain']}");
 
         return $result->successful()
@@ -76,7 +73,7 @@ class SSLController extends Controller
         if (! $this->certbotExists()) {
             return back()->with('error', 'certbot is not installed.');
         }
-        $result = Process::timeout(120)->run(['certbot', 'delete', '--cert-name', $data['domain'], '-n']);
+        $result = Process::timeout(120)->run([...$this->sudo(), 'certbot', 'delete', '--cert-name', $data['domain'], '-n']);
         ActivityLogger::log('ssl.revoke', "Revoked/deleted certificate {$data['domain']}", 'warning');
 
         return $result->successful()
@@ -86,9 +83,14 @@ class SSLController extends Controller
 
     // ---------------------------------------------------------------- helpers
 
-    private function available(): bool
+    /** sudo prefix — empty when already root, non-interactive otherwise. */
+    private function sudo(): array
     {
-        return is_dir($this->liveDir) || $this->certbotExists();
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            return [];
+        }
+
+        return ['sudo', '-n'];
     }
 
     private function certbotExists(): bool
@@ -96,69 +98,62 @@ class SSLController extends Controller
         return trim(Process::run('command -v certbot')->output()) !== '';
     }
 
+    /**
+     * List certificates via `certbot certificates` (uses the sudo-allowed
+     * certbot binary, so it works as the www-data web user without needing
+     * read access to /etc/letsencrypt).
+     */
     private function scanCertificates(): array
     {
-        if (! is_dir($this->liveDir)) {
+        $res = Process::timeout(20)->run([...$this->sudo(), 'certbot', 'certificates']);
+        if (! $res->successful()) {
             return [];
         }
+
+        return $this->parseCertbotOutput($res->output());
+    }
+
+    private function parseCertbotOutput(string $output): array
+    {
         $certs = [];
-        foreach (array_diff(scandir($this->liveDir) ?: [], ['.', '..', 'README']) as $name) {
-            $certFile = $this->liveDir . '/' . $name . '/cert.pem';
-            if (! is_file($certFile)) {
+        // Split into per-certificate blocks.
+        $blocks = preg_split('/Certificate Name:\s*/', $output);
+        foreach ($blocks as $block) {
+            if (! preg_match('/^([^\s]+)/', trim($block), $nameM)) {
                 continue;
             }
-            $parsed = $this->parseCert($certFile);
-            if ($parsed === null) {
-                continue;
+            $name = $nameM[1];
+            $domains = preg_match('/Domains:\s*(.+)/', $block, $m) ? preg_split('/\s+/', trim($m[1])) : [$name];
+
+            $daysLeft = 0;
+            $expiry = '—';
+            $statusWord = 'VALID';
+            if (preg_match('/Expiry Date:\s*([0-9-]+)[^\(]*\((\w+)[:,]?\s*([0-9]+)?\s*day/i', $block, $e)) {
+                $expiry = $e[1];
+                $statusWord = strtoupper($e[2]);
+                $daysLeft = isset($e[3]) ? (int) $e[3] : 0;
             }
-            $certs[] = array_merge($parsed, [
-                'auto_renew' => is_file($this->renewalDir . '/' . $name . '.conf'),
-            ]);
+
+            $status = $statusWord === 'EXPIRED' || $statusWord === 'INVALID'
+                ? 'expired'
+                : ($daysLeft <= 30 ? 'expiring_soon' : 'valid');
+
+            $isWildcard = (bool) array_filter($domains, fn($d) => str_starts_with($d, '*.'));
+
+            $certs[] = [
+                'domain'     => $domains[0] ?? $name,
+                'san'        => $domains,
+                'issuer'     => "Let's Encrypt",
+                'type'       => $isWildcard ? 'Wildcard' : 'Single',
+                'issued'     => '—',
+                'expiry'     => $expiry,
+                'days_left'  => max($daysLeft, 0),
+                'status'     => $status,
+                'auto_renew' => true,
+            ];
         }
         usort($certs, fn($a, $b) => $a['days_left'] <=> $b['days_left']);
 
         return $certs;
-    }
-
-    private function parseCert(string $certFile): ?array
-    {
-        $result = Process::run([
-            'openssl', 'x509', '-in', $certFile, '-noout',
-            '-subject', '-issuer', '-startdate', '-enddate', '-ext', 'subjectAltName',
-        ]);
-        if (! $result->successful()) {
-            return null;
-        }
-        $out = $result->output();
-
-        $cn = preg_match('/subject=.*?CN\s*=\s*([^,\n]+)/', $out, $m) ? trim($m[1]) : basename(dirname($certFile));
-        $issuer = preg_match('/issuer=.*?O\s*=\s*([^,\n]+)/', $out, $m) ? trim($m[1]) : 'Unknown';
-        $notBefore = preg_match('/notBefore=(.+)/', $out, $m) ? strtotime(trim($m[1])) : null;
-        $notAfter  = preg_match('/notAfter=(.+)/', $out, $m) ? strtotime(trim($m[1])) : null;
-
-        $san = [];
-        if (preg_match('/DNS:.*/', $out, $m)) {
-            foreach (explode(',', $m[0]) as $entry) {
-                $entry = trim(str_replace('DNS:', '', $entry));
-                if ($entry !== '') {
-                    $san[] = $entry;
-                }
-            }
-        }
-        $isWildcard = (bool) array_filter($san, fn($d) => str_starts_with($d, '*.'));
-        $daysLeft = $notAfter ? (int) ceil(($notAfter - time()) / 86400) : 0;
-
-        $status = $daysLeft <= 0 ? 'expired' : ($daysLeft <= 30 ? 'expiring_soon' : 'valid');
-
-        return [
-            'domain'    => $cn,
-            'san'       => $san,
-            'issuer'    => $issuer,
-            'type'      => $isWildcard ? 'Wildcard' : 'Single',
-            'issued'    => $notBefore ? date('Y-m-d', $notBefore) : '—',
-            'expiry'    => $notAfter ? date('Y-m-d', $notAfter) : '—',
-            'days_left' => max($daysLeft, 0),
-            'status'    => $status,
-        ];
     }
 }

@@ -36,11 +36,11 @@ class MysqlService
         }
         $this->tried = true;
 
-        $host   = env('DB_ADMIN_HOST', '127.0.0.1');
-        $port   = env('DB_ADMIN_PORT', 3306);
-        $user   = env('DB_ADMIN_USER', 'root');
-        $pass   = env('DB_ADMIN_PASSWORD', '');
-        $socket = env('DB_ADMIN_SOCKET');
+        $host   = config('nexpanel.db_admin.host', '127.0.0.1');
+        $port   = config('nexpanel.db_admin.port', 3306);
+        $user   = config('nexpanel.db_admin.user', 'root');
+        $pass   = config('nexpanel.db_admin.password', '');
+        $socket = config('nexpanel.db_admin.socket');
 
         $dsn = $socket
             ? "mysql:unix_socket={$socket}"
@@ -174,9 +174,9 @@ class MysqlService
         @mkdir($file, 0755, true);
         $file .= '/' . $name . '_' . date('Ymd_His') . '.sql';
 
-        $host   = env('DB_ADMIN_HOST', '127.0.0.1');
-        $user   = env('DB_ADMIN_USER', 'root');
-        $pass   = env('DB_ADMIN_PASSWORD', '');
+        $host   = config('nexpanel.db_admin.host', '127.0.0.1');
+        $user   = config('nexpanel.db_admin.user', 'root');
+        $pass   = config('nexpanel.db_admin.password', '');
         $args = ['mysqldump', '-h', $host, '-u', $user];
         if ($pass !== '') {
             $args[] = '-p' . $pass;

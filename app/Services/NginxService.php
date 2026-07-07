@@ -129,16 +129,26 @@ class NginxService
         return trim(Process::run('command -v nginx')->output());
     }
 
+    /** sudo prefix — empty when already root, non-interactive otherwise. */
+    private function sudo(): array
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            return [];
+        }
+
+        return ['sudo', '-n'];
+    }
+
     private function testAndReload(): void
     {
-        $test = Process::run(['nginx', '-t']);
+        $test = Process::run([...$this->sudo(), 'nginx', '-t']);
         if (! $test->successful()) {
             throw new \RuntimeException('nginx config test failed: ' . trim($test->errorOutput() ?: $test->output()));
         }
         // Prefer systemctl reload, fall back to `nginx -s reload`.
-        $reload = Process::run(['systemctl', 'reload', 'nginx']);
+        $reload = Process::run([...$this->sudo(), 'systemctl', 'reload', 'nginx']);
         if (! $reload->successful()) {
-            Process::run(['nginx', '-s', 'reload']);
+            Process::run([...$this->sudo(), 'nginx', '-s', 'reload']);
         }
     }
 
@@ -148,7 +158,7 @@ class NginxService
             return 'SSL skipped: certbot is not installed.';
         }
         $result = Process::timeout(120)->run([
-            'certbot', '--nginx', '-d', $domain, '-n', '--agree-tos',
+            ...$this->sudo(), 'certbot', '--nginx', '-d', $domain, '-n', '--agree-tos',
             '--register-unsafely-without-email', '--redirect',
         ]);
 
