@@ -139,6 +139,12 @@ low="${cmd,,}"
 for bad in "rm -rf /" "rm -rf /*" ":(){" "mkfs" "dd if=" "> /dev/sd" "shutdown" " halt" "init 0" "chmod -r 777 /"; do
     case "$low" in *"$bad"*) echo "nexpanel-run: blocked pattern '$bad'" >&2; exit 99 ;; esac
 done
+# Launch via systemd-run so the command runs in the system context, escaping
+# the php-fpm service sandbox (ProtectSystem) that would otherwise make /etc,
+# /usr read-only even for root.
+if command -v systemd-run >/dev/null; then
+    exec systemd-run --collect --wait --pipe --quiet /bin/bash -c "$cmd"
+fi
 exec bash -c "$cmd"
 RUNNER
 chmod 755 /usr/local/bin/nexpanel-run
