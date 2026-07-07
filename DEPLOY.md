@@ -47,6 +47,20 @@ sudo chown -R www-data:www-data storage bootstrap/cache database
 Then add the sudoers rule and an Nginx vhost (see `install.sh` steps 6–7 for the
 exact content), and reload Nginx.
 
+## Updating
+
+NexPanel does **not** update itself — the server runs a git clone, so pushing
+to GitHub doesn't touch it. To pull the latest version:
+
+```bash
+cd /var/www/nexpanel && sudo bash update.sh
+```
+
+`update.sh` fetches the latest code, updates dependencies, runs migrations,
+rebuilds caches, and reloads PHP-FPM + Nginx (running git/composer/artisan as
+the `www-data` owner so file permissions stay correct). It's safe to re-run.
+Your `.env` and the SQLite database are gitignored, so they are never touched.
+
 ## Why passwordless sudo?
 
 The panel's PHP process runs as `www-data`. Managing system services requires
