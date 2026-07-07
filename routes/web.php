@@ -78,6 +78,7 @@ Route::middleware(['auth'])->group(function () {
     // AI Assistant (Phase 2)
     Route::get('/ai', [AIController::class, 'index'])->name('ai.index');
     Route::post('/api/ai/chat', [AIController::class, 'chat'])->name('ai.chat');
+    Route::post('/api/ai/execute', [AIController::class, 'execute'])->name('ai.execute');
     Route::get('/api/ai/history', [AIController::class, 'history'])->name('ai.history');
     Route::get('/api/ai/sessions', [AIController::class, 'sessions'])->name('ai.sessions');
     Route::delete('/api/ai/session', [AIController::class, 'deleteSession'])->name('ai.deleteSession');

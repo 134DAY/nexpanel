@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AISetting;
 use App\Models\ChatHistory;
 use App\Services\AI\AIServiceFactory;
+use App\Services\AI\AIExecutor;
 use App\Services\AI\SystemPromptBuilder;
 use App\Services\AI\Actions\ActionClassifier;
 use Illuminate\Http\Request;
@@ -61,22 +62,90 @@ class AIController extends Controller
             $systemPrompt = SystemPromptBuilder::build($classification['type']);
             $response = $service->chat($history, $systemPrompt);
 
-            // Save AI response
+            // Extract a proposed action (if the AI wants to DO something).
+            [$cleanResponse, $proposedAction] = $this->parseAction($response);
+
+            // Save the (cleaned) AI response.
             ChatHistory::create([
                 'user_id' => Auth::id(),
                 'session_id' => $request->session_id,
                 'role' => 'assistant',
-                'content' => $response,
+                'content' => $cleanResponse,
             ]);
 
             return response()->json([
-                'response' => $response,
+                'response' => $cleanResponse,
                 'action' => $classification,
+                'proposedAction' => $proposedAction,
             ]);
 
         } catch (\Exception $e) {
             return response()->json(['error' => 'AI Error: ' . $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Confirm-and-run an action the AI proposed. Called only after the user
+     * clicks "Run" on the confirmation card.
+     */
+    public function execute(Request $request)
+    {
+        $data = $request->validate([
+            'tool' => 'required|string',
+            'args' => 'array',
+            'session_id' => 'required|string',
+        ]);
+        $tool = $data['tool'];
+        $args = $data['args'] ?? [];
+
+        $assessment = AIExecutor::assess($tool, $args);
+        if (! $assessment['allowed']) {
+            return response()->json(['ok' => false, 'output' => $assessment['message'], 'level' => $assessment['level']], 403);
+        }
+
+        $result = AIExecutor::run($tool, $args);
+
+        // Record the outcome in the conversation so it shows in history.
+        ChatHistory::create([
+            'user_id' => Auth::id(),
+            'session_id' => $data['session_id'],
+            'role' => 'assistant',
+            'content' => ($result['ok'] ? '✅ ' : '❌ ') . AIExecutor::describe($tool, $args) . "\n\n```\n" . $result['output'] . "\n```",
+        ]);
+
+        return response()->json([
+            'ok' => $result['ok'],
+            'output' => $result['output'],
+            'level' => $assessment['level'],
+        ]);
+    }
+
+    /**
+     * Pull a ```action {json}``` block out of the AI response.
+     * Returns [cleaned_text, proposedAction|null].
+     */
+    private function parseAction(string $response): array
+    {
+        if (! preg_match('/```action\s*(.+?)```/s', $response, $m)) {
+            return [$response, null];
+        }
+        $json = json_decode(trim($m[1]), true);
+        $cleaned = trim(str_replace($m[0], '', $response));
+
+        if (! is_array($json) || empty($json['tool'])) {
+            return [$cleaned, null];
+        }
+        $tool = $json['tool'];
+        $args = $json['args'] ?? [];
+        $assessment = AIExecutor::assess($tool, $args);
+
+        return [$cleaned, [
+            'tool'    => $tool,
+            'args'    => $args,
+            'summary' => AIExecutor::describe($tool, $args),
+            'level'   => $assessment['level'],
+            'allowed' => $assessment['allowed'],
+        ]];
     }
 
     public function newSession()

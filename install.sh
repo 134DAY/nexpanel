@@ -126,11 +126,28 @@ mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/letsencrypt
 chgrp -R "$APP_USER" /etc/nginx/sites-available /etc/nginx/sites-enabled 2>/dev/null || true
 chmod -R g+w /etc/nginx/sites-available /etc/nginx/sites-enabled 2>/dev/null || true
 
-# ---- 6. passwordless sudo for service control ---------------------------
-log "Granting $APP_USER passwordless sudo for service management"
+# ---- 6. privileged command runner for the AI Assistant ------------------
+# The AI "shell" fallback runs commands as root through this denylisted wrapper
+# (defense-in-depth on top of the app's SafetyGuard + user confirmation).
+log "Installing privileged command runner for the AI Assistant"
+cat > /usr/local/bin/nexpanel-run <<'RUNNER'
+#!/bin/bash
+# nexpanel-run — execute a command (read from stdin) as root for NexPanel.
+# Only reachable via sudo by the web user; refuses catastrophic patterns.
+cmd="$(cat)"
+low="${cmd,,}"
+for bad in "rm -rf /" "rm -rf /*" ":(){" "mkfs" "dd if=" "> /dev/sd" "shutdown" " halt" "init 0" "chmod -r 777 /"; do
+    case "$low" in *"$bad"*) echo "nexpanel-run: blocked pattern '$bad'" >&2; exit 99 ;; esac
+done
+exec bash -c "$cmd"
+RUNNER
+chmod 755 /usr/local/bin/nexpanel-run
+
+# ---- 6b. passwordless sudo for service control + AI runner --------------
+log "Granting $APP_USER passwordless sudo"
 cat > /etc/sudoers.d/nexpanel <<SUDO
-# Allow the NexPanel web user to manage services without a password prompt.
-$APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl, /bin/systemctl, /usr/sbin/nginx, /usr/bin/certbot
+# Allow the NexPanel web user to manage services and run confirmed AI commands.
+$APP_USER ALL=(root) NOPASSWD: /usr/bin/systemctl, /bin/systemctl, /usr/sbin/nginx, /usr/bin/certbot, /usr/local/bin/nexpanel-run
 SUDO
 chmod 440 /etc/sudoers.d/nexpanel
 visudo -cf /etc/sudoers.d/nexpanel || die "Invalid sudoers file generated."

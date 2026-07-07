@@ -148,9 +148,56 @@
                                     }"
                                     x-text="msg.action?.type"></span>
                             </div>
-                            <div class="px-4 py-3 rounded-2xl rounded-tl-md bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/10">
+                            <div x-show="msg.content" class="px-4 py-3 rounded-2xl rounded-tl-md bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/10">
                                 <div class="text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap prose-sm" x-html="formatMarkdown(msg.content)"></div>
                             </div>
+
+                            <!-- Action confirmation card -->
+                            <template x-if="msg.proposedAction && !msg.executed">
+                                <div class="mt-2 rounded-2xl border overflow-hidden"
+                                     :class="{
+                                        'border-amber-300 dark:border-amber-500/40': msg.proposedAction.level === 'caution',
+                                        'border-red-300 dark:border-red-500/40': msg.proposedAction.level === 'dangerous' || msg.proposedAction.level === 'blocked',
+                                        'border-emerald-300 dark:border-emerald-500/40': msg.proposedAction.level === 'safe',
+                                     }">
+                                    <div class="px-4 py-2.5 flex items-center gap-2"
+                                         :class="{
+                                            'bg-amber-50 dark:bg-amber-500/10': msg.proposedAction.level === 'caution',
+                                            'bg-red-50 dark:bg-red-500/10': msg.proposedAction.level === 'dangerous' || msg.proposedAction.level === 'blocked',
+                                            'bg-emerald-50 dark:bg-emerald-500/10': msg.proposedAction.level === 'safe',
+                                         }">
+                                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/></svg>
+                                        <span class="text-xs font-bold uppercase tracking-wide" x-text="msg.proposedAction.level"></span>
+                                        <span class="text-xs text-slate-500 dark:text-slate-400">— confirm to run</span>
+                                    </div>
+                                    <div class="px-4 py-3 bg-white dark:bg-white/5">
+                                        <p class="text-sm font-medium text-slate-800 dark:text-white mb-1" x-text="msg.proposedAction.summary"></p>
+                                        <code class="block text-[11px] font-mono text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-black/20 rounded-lg px-2 py-1.5 mb-3 break-all"
+                                              x-text="msg.proposedAction.tool + '(' + JSON.stringify(msg.proposedAction.args) + ')'"></code>
+                                        <div class="flex gap-2">
+                                            <button @click="runAction(msg)" :disabled="msg.running || !msg.proposedAction.allowed"
+                                                class="px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-gradient-to-r from-cyan-500 to-blue-600 hover:shadow-lg disabled:opacity-40 disabled:cursor-not-allowed">
+                                                <span x-show="!msg.running">▶ Run</span>
+                                                <span x-show="msg.running">Running…</span>
+                                            </button>
+                                            <button @click="msg.executed = true" :disabled="msg.running"
+                                                class="px-4 py-1.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/20">Cancel</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- Action result -->
+                            <template x-if="msg.result">
+                                <div class="mt-2 rounded-2xl border overflow-hidden"
+                                     :class="msg.result.ok ? 'border-emerald-300 dark:border-emerald-500/30' : 'border-red-300 dark:border-red-500/30'">
+                                    <div class="px-4 py-2 text-xs font-bold flex items-center gap-1.5"
+                                         :class="msg.result.ok ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400'">
+                                        <span x-text="msg.result.ok ? '✅ Done' : '❌ Failed'"></span>
+                                    </div>
+                                    <pre class="px-4 py-3 text-[11px] font-mono text-slate-600 dark:text-slate-300 bg-slate-900/5 dark:bg-black/20 whitespace-pre-wrap max-h-56 overflow-auto" x-text="msg.result.output"></pre>
+                                </div>
+                            </template>
                         </div>
                     </div>
                     <!-- User message -->
@@ -281,6 +328,28 @@ function aiChat() {
 
         sendQuick(text) { this.input = text; this.sendMessage(); },
 
+        async runAction(msg) {
+            if (msg.running) return;
+            const pa = msg.proposedAction;
+            if (pa.level === 'dangerous' && !confirm('⚠️ This is a destructive action:\n\n' + pa.summary + '\n\nRun it anyway?')) return;
+            msg.running = true;
+            try {
+                const res = await fetch('/api/ai/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+                    body: JSON.stringify({ tool: pa.tool, args: pa.args, session_id: this.currentSession })
+                });
+                const data = await res.json();
+                msg.result = { ok: !!data.ok, output: data.output || (data.ok ? 'Done.' : 'Failed.') };
+            } catch (e) {
+                msg.result = { ok: false, output: 'Connection error: ' + e.message };
+            }
+            msg.running = false;
+            msg.executed = true;
+            await this.loadSessions();
+            this.scrollToBottom();
+        },
+
         async sendMessage() {
             const text = this.input.trim();
             if (!text || this.loading) return;
@@ -305,7 +374,11 @@ function aiChat() {
                     this.messages.push({
                         role: 'assistant',
                         content: data.response,
-                        action: data.action || null
+                        action: data.action || null,
+                        proposedAction: data.proposedAction || null,
+                        executed: false,
+                        running: false,
+                        result: null
                     });
                 }
 
