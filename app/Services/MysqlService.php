@@ -1,0 +1,233 @@
+<?php
+
+namespace App\Services;
+
+use PDO;
+
+/**
+ * Manages a local MySQL/MariaDB server via an admin PDO connection.
+ * Credentials come from env (DB_ADMIN_*); defaults suit a fresh
+ * root@localhost install.
+ */
+class MysqlService
+{
+    private const SYSTEM_SCHEMAS = ['information_schema', 'performance_schema', 'mysql', 'sys'];
+
+    private ?PDO $pdo = null;
+    private bool $tried = false;
+    private ?string $error = null;
+
+    public function available(): bool
+    {
+        return $this->connect() !== null;
+    }
+
+    public function error(): ?string
+    {
+        $this->connect();
+
+        return $this->error;
+    }
+
+    private function connect(): ?PDO
+    {
+        if ($this->tried) {
+            return $this->pdo;
+        }
+        $this->tried = true;
+
+        $host   = env('DB_ADMIN_HOST', '127.0.0.1');
+        $port   = env('DB_ADMIN_PORT', 3306);
+        $user   = env('DB_ADMIN_USER', 'root');
+        $pass   = env('DB_ADMIN_PASSWORD', '');
+        $socket = env('DB_ADMIN_SOCKET');
+
+        $dsn = $socket
+            ? "mysql:unix_socket={$socket}"
+            : "mysql:host={$host};port={$port}";
+
+        try {
+            $this->pdo = new PDO($dsn, $user, $pass, [
+                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_TIMEOUT           => 3,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            ]);
+        } catch (\Throwable $e) {
+            $this->error = $e->getMessage();
+            $this->pdo = null;
+        }
+
+        return $this->pdo;
+    }
+
+    public function databases(): array
+    {
+        $pdo = $this->connect();
+        if (! $pdo) {
+            return [];
+        }
+        $placeholders = implode(',', array_fill(0, count(self::SYSTEM_SCHEMAS), '?'));
+        $stmt = $pdo->prepare("
+            SELECT s.schema_name AS name,
+                   s.default_character_set_name AS charset,
+                   COALESCE(SUM(t.data_length + t.index_length), 0) AS size_bytes,
+                   COUNT(t.table_name) AS tables
+            FROM information_schema.schemata s
+            LEFT JOIN information_schema.tables t ON t.table_schema = s.schema_name
+            WHERE s.schema_name NOT IN ({$placeholders})
+            GROUP BY s.schema_name, s.default_character_set_name
+            ORDER BY s.schema_name
+        ");
+        $stmt->execute(self::SYSTEM_SCHEMAS);
+
+        return array_map(fn($r) => [
+            'name'        => $r['name'],
+            'charset'     => $r['charset'] ?? '—',
+            'size'        => $this->humanSize((int) $r['size_bytes']),
+            'tables'      => (int) $r['tables'],
+            'last_backup' => '—',
+        ], $stmt->fetchAll());
+    }
+
+    public function totalSizeBytes(): int
+    {
+        $pdo = $this->connect();
+        if (! $pdo) {
+            return 0;
+        }
+        $placeholders = implode(',', array_fill(0, count(self::SYSTEM_SCHEMAS), '?'));
+        $stmt = $pdo->prepare("
+            SELECT COALESCE(SUM(data_length + index_length), 0)
+            FROM information_schema.tables
+            WHERE table_schema NOT IN ({$placeholders})
+        ");
+        $stmt->execute(self::SYSTEM_SCHEMAS);
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    public function totalSizeHuman(): string
+    {
+        return $this->humanSize($this->totalSizeBytes());
+    }
+
+    public function users(): array
+    {
+        $pdo = $this->connect();
+        if (! $pdo) {
+            return [];
+        }
+        try {
+            $rows = $pdo->query("
+                SELECT User AS username, Host AS host, Super_priv AS super
+                FROM mysql.user ORDER BY User, Host
+            ")->fetchAll();
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        return array_map(fn($r) => [
+            'username'   => $r['username'],
+            'host'       => $r['host'],
+            'databases'  => $r['super'] === 'Y' ? 'All' : '—',
+            'privileges' => $r['super'] === 'Y' ? 'ALL PRIVILEGES' : 'Limited',
+        ], $rows);
+    }
+
+    public function createDatabase(string $name, string $charset = 'utf8mb4'): void
+    {
+        $this->assertIdentifier($name);
+        $charset = preg_match('/^[a-z0-9_]+$/i', $charset) ? $charset : 'utf8mb4';
+        $collation = $charset === 'utf8mb4' ? 'utf8mb4_unicode_ci' : ($charset . '_general_ci');
+        $this->pdoOrFail()->exec("CREATE DATABASE `{$name}` CHARACTER SET {$charset} COLLATE {$collation}");
+    }
+
+    public function dropDatabase(string $name): void
+    {
+        $this->assertIdentifier($name);
+        $this->pdoOrFail()->exec("DROP DATABASE `{$name}`");
+    }
+
+    public function createUser(string $username, string $password, string $host = 'localhost'): void
+    {
+        $this->assertIdentifier($username);
+        $pdo = $this->pdoOrFail();
+        $u = $pdo->quote($username);
+        $h = $pdo->quote($host);
+        $p = $pdo->quote($password);
+        // Identifiers in CREATE USER are string literals in MySQL syntax.
+        $pdo->exec("CREATE USER {$u}@{$h} IDENTIFIED BY {$p}");
+    }
+
+    public function dropUser(string $username, string $host = 'localhost'): void
+    {
+        $this->assertIdentifier($username);
+        $pdo = $this->pdoOrFail();
+        $pdo->exec("DROP USER {$pdo->quote($username)}@{$pdo->quote($host)}");
+    }
+
+    /** Path to a fresh gzip dump of the given database, or throws. */
+    public function dumpToFile(string $name): string
+    {
+        $this->assertIdentifier($name);
+        $file = storage_path('app/backups');
+        @mkdir($file, 0755, true);
+        $file .= '/' . $name . '_' . date('Ymd_His') . '.sql';
+
+        $host   = env('DB_ADMIN_HOST', '127.0.0.1');
+        $user   = env('DB_ADMIN_USER', 'root');
+        $pass   = env('DB_ADMIN_PASSWORD', '');
+        $args = ['mysqldump', '-h', $host, '-u', $user];
+        if ($pass !== '') {
+            $args[] = '-p' . $pass;
+        }
+        $args[] = $name;
+
+        $out = @fopen($file, 'w');
+        $proc = proc_open($args, [1 => $out, 2 => ['pipe', 'w']], $pipes);
+        if (! is_resource($proc)) {
+            throw new \RuntimeException('Could not start mysqldump');
+        }
+        $err = stream_get_contents($pipes[2]);
+        fclose($pipes[2]);
+        $code = proc_close($proc);
+        if (is_resource($out)) {
+            fclose($out);
+        }
+        if ($code !== 0) {
+            @unlink($file);
+            throw new \RuntimeException('mysqldump failed: ' . trim($err));
+        }
+
+        return $file;
+    }
+
+    private function pdoOrFail(): PDO
+    {
+        $pdo = $this->connect();
+        if (! $pdo) {
+            throw new \RuntimeException('Cannot connect to MySQL: ' . ($this->error ?? 'unknown error'));
+        }
+
+        return $pdo;
+    }
+
+    private function assertIdentifier(string $name): void
+    {
+        if (! preg_match('/^[A-Za-z0-9_]+$/', $name)) {
+            throw new \InvalidArgumentException('Name may only contain letters, numbers and underscores.');
+        }
+    }
+
+    private function humanSize(int $bytes): string
+    {
+        if ($bytes <= 0) {
+            return '0 B';
+        }
+        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        $i = (int) floor(log($bytes, 1024));
+        $i = min($i, count($units) - 1);
+
+        return round($bytes / (1024 ** $i), $i === 0 ? 0 : 1) . ' ' . $units[$i];
+    }
+}
