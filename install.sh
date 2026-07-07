@@ -135,6 +135,18 @@ SUDO
 chmod 440 /etc/sudoers.d/nexpanel
 visudo -cf /etc/sudoers.d/nexpanel || die "Invalid sudoers file generated."
 
+# ---- 6b. let PHP-FPM write /etc/nginx & /etc/letsencrypt ------------------
+# The php-fpm unit ships with ProtectSystem=full, which makes /etc read-only
+# for the web process — so the Website/SSL modules can't write vhosts/certs.
+# Punch through with ReadWritePaths.
+log "Allowing PHP-FPM to manage /etc/nginx and /etc/letsencrypt"
+mkdir -p "/etc/systemd/system/php${PHP_VERSION}-fpm.service.d"
+cat > "/etc/systemd/system/php${PHP_VERSION}-fpm.service.d/nexpanel.conf" <<FPMOV
+[Service]
+ReadWritePaths=/etc/nginx /etc/letsencrypt
+FPMOV
+systemctl daemon-reload
+
 # ---- 7. nginx vhost for the panel --------------------------------------
 log "Configuring Nginx site for the panel"
 cat > /etc/nginx/sites-available/nexpanel <<NGINX
@@ -167,6 +179,7 @@ rm -f /etc/nginx/sites-enabled/default
 # ---- 8. start everything ------------------------------------------------
 log "Enabling and starting services"
 systemctl enable --now "php${PHP_VERSION}-fpm" nginx mysql cron >/dev/null 2>&1 || true
+systemctl restart "php${PHP_VERSION}-fpm"   # apply the ReadWritePaths drop-in
 nginx -t && systemctl reload nginx
 
 IP="$(hostname -I | awk '{print $1}')"
