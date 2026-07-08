@@ -174,8 +174,10 @@ systemctl daemon-reload
 log "Configuring Nginx site for the panel"
 cat > /etc/nginx/sites-available/nexpanel <<NGINX
 server {
-    listen 80;
-    listen [::]:80;
+    # default_server so the panel always answers unmatched hosts (e.g. the
+    # server IP) even after users/AI add other vhosts.
+    listen 80 default_server;
+    listen [::]:80 default_server;
     server_name ${SERVER_NAME};
 
     root ${APP_DIR}/public;
