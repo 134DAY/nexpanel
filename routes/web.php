@@ -40,15 +40,6 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/databases/{name}/import', [DatabaseController::class, 'import'])->name('databases.import');
     Route::get('/databases/{name}/permission', [DatabaseController::class, 'permission'])->name('databases.permission');
     Route::post('/databases/{name}/grant', [DatabaseController::class, 'grant'])->name('databases.grant');
-    Route::post('/databases/{name}/table/{table}/update', [DatabaseController::class, 'updateRow'])->name('databases.table.update');
-    Route::post('/databases/{name}/table/{table}/deleterow', [DatabaseController::class, 'deleteRow'])->name('databases.table.deleterow');
-    Route::get('/databases/{name}/browse', [DatabaseController::class, 'browse'])->name('databases.browse');
-    Route::get('/databases/{name}/table/{table}', [DatabaseController::class, 'tableData'])->name('databases.table');
-    Route::get('/databases/{name}/table/{table}/structure', [DatabaseController::class, 'tableStructure'])->name('databases.table.structure');
-    Route::post('/databases/{name}/table/{table}/truncate', [DatabaseController::class, 'truncateTable'])->name('databases.table.truncate');
-    Route::post('/databases/{name}/table/{table}/drop', [DatabaseController::class, 'dropTable'])->name('databases.table.drop');
-    Route::post('/databases/{name}/table/{table}/insert', [DatabaseController::class, 'insertRow'])->name('databases.table.insert');
-    Route::post('/databases/{name}/sql', [DatabaseController::class, 'runSql'])->name('databases.sql');
     Route::get('/databases/{name}/backup', [DatabaseController::class, 'backup'])->name('databases.backup');
     Route::delete('/databases/{name}', [DatabaseController::class, 'destroy'])->name('databases.destroy');
 

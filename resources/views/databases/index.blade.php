@@ -68,7 +68,7 @@
                 @forelse($databases as $db)
                 <tr class="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors" x-data="{ show:false }">
                     <td class="px-5 py-3">
-                        <a href="/databases/{{ urlencode($db['name']) }}/browse" class="flex items-center gap-2.5 text-sm font-semibold text-slate-800 dark:text-white font-mono hover:text-cyan-600 dark:hover:text-cyan-400">
+                        <a @if($phpmyadmin) href="/phpmyadmin/index.php?db={{ urlencode($db['name']) }}" target="_blank" @endif class="flex items-center gap-2.5 text-sm font-semibold text-slate-800 dark:text-white font-mono @if($phpmyadmin) hover:text-cyan-600 dark:hover:text-cyan-400 @endif">
                             <span class="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center shrink-0"><svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375"/></svg></span>
                             {{ $db['name'] }}
                         </a>
@@ -89,7 +89,6 @@
                     <td class="px-3 py-3 text-sm text-slate-600 dark:text-slate-400">{{ $db['tables'] }}</td>
                     <td class="px-5 py-3">
                         <div class="flex items-center justify-end gap-1 text-slate-400">
-                            <a href="/databases/{{ urlencode($db['name']) }}/browse" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 hover:text-cyan-500" title="Browse (built-in)"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z"/></svg></a>
                             @if($phpmyadmin)
                             <a href="/phpmyadmin/index.php?db={{ urlencode($db['name']) }}" target="_blank" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 hover:text-orange-500" title="Open in phpMyAdmin"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15H9v-6h2v6zm4 0h-2v-6h2v6z"/></svg></a>
                             @endif
