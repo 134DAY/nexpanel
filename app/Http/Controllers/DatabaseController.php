@@ -79,6 +79,52 @@ class DatabaseController extends Controller
         }
     }
 
+    public function tableStructure(Request $request, string $name, string $table): JsonResponse
+    {
+        try {
+            return response()->json($this->mysql->tableStructure($name, $table));
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    public function truncateTable(Request $request, string $name, string $table): JsonResponse
+    {
+        try {
+            $this->mysql->truncateTable($name, $table);
+            ActivityLogger::log('database.truncate', "Emptied {$name}.{$table}", 'warning');
+
+            return response()->json(['ok' => true]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    public function dropTable(Request $request, string $name, string $table): JsonResponse
+    {
+        try {
+            $this->mysql->dropTable($name, $table);
+            ActivityLogger::log('database.droptable', "Dropped {$name}.{$table}", 'warning');
+
+            return response()->json(['ok' => true]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    public function insertRow(Request $request, string $name, string $table): JsonResponse
+    {
+        $data = $request->validate(['row' => 'required|array']);
+        try {
+            $this->mysql->insertRow($name, $table, $data['row']);
+            ActivityLogger::log('database.insert', "Inserted row into {$name}.{$table}");
+
+            return response()->json(['ok' => true]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
     public function runSql(Request $request, string $name): JsonResponse
     {
         $data = $request->validate(['sql' => 'required|string|max:10000']);

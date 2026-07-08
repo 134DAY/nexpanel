@@ -187,6 +187,52 @@ class MysqlService
         return ['columns' => $columns, 'rows' => $rows];
     }
 
+    /** Column definitions of a table (Field, Type, Null, Key, Default, Extra). */
+    public function tableStructure(string $db, string $table): array
+    {
+        $this->assertIdentifier($db);
+        $this->assertIdentifier($table);
+
+        return $this->pdoOrFail()->query("SHOW COLUMNS FROM `{$db}`.`{$table}`")->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function truncateTable(string $db, string $table): void
+    {
+        $this->assertIdentifier($db);
+        $this->assertIdentifier($table);
+        $this->pdoOrFail()->exec("TRUNCATE TABLE `{$db}`.`{$table}`");
+    }
+
+    public function dropTable(string $db, string $table): void
+    {
+        $this->assertIdentifier($db);
+        $this->assertIdentifier($table);
+        $this->pdoOrFail()->exec("DROP TABLE `{$db}`.`{$table}`");
+    }
+
+    /** Insert a row; empty string values are skipped (use column default). */
+    public function insertRow(string $db, string $table, array $data): void
+    {
+        $this->assertIdentifier($db);
+        $this->assertIdentifier($table);
+        $cols = [];
+        $placeholders = [];
+        $values = [];
+        foreach ($data as $col => $val) {
+            if (! preg_match('/^[A-Za-z0-9_]+$/', (string) $col) || $val === '') {
+                continue;
+            }
+            $cols[] = "`{$col}`";
+            $placeholders[] = '?';
+            $values[] = $val;
+        }
+        if (! $cols) {
+            throw new \RuntimeException('No values to insert.');
+        }
+        $sql = "INSERT INTO `{$db}`.`{$table}` (" . implode(',', $cols) . ') VALUES (' . implode(',', $placeholders) . ')';
+        $this->pdoOrFail()->prepare($sql)->execute($values);
+    }
+
     /** Run an arbitrary SQL statement against a database (admin SQL console). */
     public function runQuery(string $db, string $sql): array
     {

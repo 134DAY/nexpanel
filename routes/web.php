@@ -38,6 +38,10 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/databases/users/drop', [DatabaseController::class, 'dropUser'])->name('databases.users.drop');
     Route::get('/databases/{name}/browse', [DatabaseController::class, 'browse'])->name('databases.browse');
     Route::get('/databases/{name}/table/{table}', [DatabaseController::class, 'tableData'])->name('databases.table');
+    Route::get('/databases/{name}/table/{table}/structure', [DatabaseController::class, 'tableStructure'])->name('databases.table.structure');
+    Route::post('/databases/{name}/table/{table}/truncate', [DatabaseController::class, 'truncateTable'])->name('databases.table.truncate');
+    Route::post('/databases/{name}/table/{table}/drop', [DatabaseController::class, 'dropTable'])->name('databases.table.drop');
+    Route::post('/databases/{name}/table/{table}/insert', [DatabaseController::class, 'insertRow'])->name('databases.table.insert');
     Route::post('/databases/{name}/sql', [DatabaseController::class, 'runSql'])->name('databases.sql');
     Route::get('/databases/{name}/backup', [DatabaseController::class, 'backup'])->name('databases.backup');
     Route::delete('/databases/{name}', [DatabaseController::class, 'destroy'])->name('databases.destroy');
