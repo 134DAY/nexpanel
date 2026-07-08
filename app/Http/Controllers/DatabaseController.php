@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\ActivityLogger;
 use App\Services\MysqlService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -54,6 +55,40 @@ class DatabaseController extends Controller
             return back()->with('success', "Database '{$data['name']}' created.");
         } catch (\Throwable $e) {
             return back()->with('error', $e->getMessage());
+        }
+    }
+
+    public function browse(Request $request, string $name)
+    {
+        if (! $this->mysql->available()) {
+            return redirect()->route('databases.index')->with('error', 'Cannot connect to MySQL.');
+        }
+
+        return view('databases.browse', [
+            'db'     => $name,
+            'tables' => $this->mysql->tables($name),
+        ]);
+    }
+
+    public function tableData(Request $request, string $name, string $table): JsonResponse
+    {
+        try {
+            return response()->json($this->mysql->tablePreview($name, $table));
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    public function runSql(Request $request, string $name): JsonResponse
+    {
+        $data = $request->validate(['sql' => 'required|string|max:10000']);
+        try {
+            $result = $this->mysql->runQuery($name, $data['sql']);
+            ActivityLogger::log('database.query', "SQL on {$name}: " . mb_substr($data['sql'], 0, 200), 'warning');
+
+            return response()->json($result);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
         }
     }
 

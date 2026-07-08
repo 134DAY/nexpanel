@@ -148,6 +148,62 @@ class MysqlService
         $this->pdoOrFail()->exec("DROP DATABASE `{$name}`");
     }
 
+    /** Tables in a database with row count + size. */
+    public function tables(string $db): array
+    {
+        $this->assertIdentifier($db);
+        $stmt = $this->pdoOrFail()->prepare('
+            SELECT table_name AS name, table_rows AS n_rows,
+                   COALESCE(data_length + index_length, 0) AS size
+            FROM information_schema.tables
+            WHERE table_schema = ? ORDER BY table_name
+        ');
+        $stmt->execute([$db]);
+
+        return array_map(fn($r) => [
+            'name' => $r['name'],
+            'rows' => (int) $r['n_rows'],
+            'size' => $this->humanSize((int) $r['size']),
+        ], $stmt->fetchAll());
+    }
+
+    /** First N rows of a table plus its column names. */
+    public function tablePreview(string $db, string $table, int $limit = 100): array
+    {
+        $this->assertIdentifier($db);
+        $this->assertIdentifier($table);
+        $pdo = $this->pdoOrFail();
+        $limit = max(1, min($limit, 500));
+
+        $colStmt = $pdo->prepare('
+            SELECT column_name FROM information_schema.columns
+            WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position
+        ');
+        $colStmt->execute([$db, $table]);
+        $columns = $colStmt->fetchAll(PDO::FETCH_COLUMN);
+
+        $rows = $pdo->query("SELECT * FROM `{$db}`.`{$table}` LIMIT {$limit}")->fetchAll(PDO::FETCH_ASSOC);
+
+        return ['columns' => $columns, 'rows' => $rows];
+    }
+
+    /** Run an arbitrary SQL statement against a database (admin SQL console). */
+    public function runQuery(string $db, string $sql): array
+    {
+        $this->assertIdentifier($db);
+        $pdo = $this->pdoOrFail();
+        $pdo->exec("USE `{$db}`");
+        $stmt = $pdo->query($sql);
+
+        if ($stmt->columnCount() > 0) {
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            return ['columns' => $rows ? array_keys($rows[0]) : [], 'rows' => $rows, 'affected' => null];
+        }
+
+        return ['columns' => [], 'rows' => [], 'affected' => $stmt->rowCount()];
+    }
+
     public function createUser(string $username, string $password, string $host = 'localhost'): void
     {
         $this->assertIdentifier($username);

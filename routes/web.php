@@ -36,6 +36,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/databases', [DatabaseController::class, 'index'])->name('databases.index');
     Route::post('/databases', [DatabaseController::class, 'store'])->name('databases.store');
     Route::post('/databases/users/drop', [DatabaseController::class, 'dropUser'])->name('databases.users.drop');
+    Route::get('/databases/{name}/browse', [DatabaseController::class, 'browse'])->name('databases.browse');
+    Route::get('/databases/{name}/table/{table}', [DatabaseController::class, 'tableData'])->name('databases.table');
+    Route::post('/databases/{name}/sql', [DatabaseController::class, 'runSql'])->name('databases.sql');
     Route::get('/databases/{name}/backup', [DatabaseController::class, 'backup'])->name('databases.backup');
     Route::delete('/databases/{name}', [DatabaseController::class, 'destroy'])->name('databases.destroy');
 
