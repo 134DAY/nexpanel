@@ -31,7 +31,7 @@ command -v apt-get >/dev/null || die "This installer targets Debian/Ubuntu."
 log "Installing system packages (this can take a few minutes)"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y software-properties-common curl unzip git ca-certificates lsb-release
+apt-get install -y software-properties-common curl unzip zip tar gzip git ca-certificates lsb-release
 # Ondrej PPA gives predictable PHP versions on Ubuntu.
 add-apt-repository -y ppa:ondrej/php 2>/dev/null || warn "Could not add ondrej PPA; using distro PHP."
 apt-get update -y

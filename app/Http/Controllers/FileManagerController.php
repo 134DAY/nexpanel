@@ -74,7 +74,11 @@ class FileManagerController extends Controller
             return response()->json(['error' => 'Path is a directory'], 400);
         }
         if (@file_put_contents($path, $request->input('content')) === false) {
-            return response()->json(['error' => 'Permission denied writing file'], 403);
+            // Root fallback: write via base64 to dodge quoting.
+            $cmd = 'echo ' . escapeshellarg(base64_encode($request->input('content'))) . ' | base64 -d > ' . escapeshellarg($path);
+            if (! $this->runRoot($cmd)) {
+                return response()->json(['error' => 'Permission denied writing file'], 403);
+            }
         }
         ActivityLogger::log('file.save', "Edited file {$path}");
 
@@ -103,6 +107,12 @@ class FileManagerController extends Controller
             : @touch($target);
 
         if (! $ok) {
+            $base = $request->input('type') === 'folder'
+                ? 'mkdir -p ' . escapeshellarg($target)
+                : 'touch ' . escapeshellarg($target);
+            $ok = $this->runRoot($base . $this->chownWww($target));
+        }
+        if (! $ok) {
             return response()->json(['error' => 'Permission denied'], 403);
         }
         ActivityLogger::log('file.create', "Created {$request->input('type')} {$target}");
@@ -127,7 +137,9 @@ class FileManagerController extends Controller
             return response()->json(['error' => 'Target already exists'], 409);
         }
         if (! @rename($path, $target)) {
-            return response()->json(['error' => 'Permission denied'], 403);
+            if (! $this->runRoot('mv ' . escapeshellarg($path) . ' ' . escapeshellarg($target))) {
+                return response()->json(['error' => 'Permission denied'], 403);
+            }
         }
         ActivityLogger::log('file.rename', "Renamed {$path} → {$target}");
 
@@ -148,7 +160,10 @@ class FileManagerController extends Controller
         }
 
         $ok = is_dir($path) ? $this->rrmdir($path) : @unlink($path);
-        if (! $ok) {
+        if (! $ok && file_exists($path)) {
+            $ok = $this->runRoot('rm -rf ' . escapeshellarg($path));
+        }
+        if (! $ok && file_exists($path)) {
             return response()->json(['error' => 'Permission denied'], 403);
         }
         ActivityLogger::log('file.delete', "Deleted {$path}");
@@ -161,15 +176,25 @@ class FileManagerController extends Controller
         $request->validate(['path' => 'required|string', 'file' => 'required|file']);
         $dir = $this->normalize($request->input('path'));
 
-        if (! is_dir($dir) || ! is_writable($dir)) {
-            return response()->json(['error' => 'Destination not writable'], 403);
+        if (! is_dir($dir)) {
+            return response()->json(['error' => 'Destination is not a directory'], 400);
         }
         $file = $request->file('file');
         $name = basename($file->getClientOriginalName());
-        try {
-            $file->move($dir, $name);
-        } catch (\Throwable $e) {
-            return response()->json(['error' => 'Upload failed: ' . $e->getMessage()], 500);
+        $target = $dir . '/' . $name;
+
+        if (is_writable($dir)) {
+            try {
+                $file->move($dir, $name);
+            } catch (\Throwable $e) {
+                return response()->json(['error' => 'Upload failed: ' . $e->getMessage()], 500);
+            }
+        } else {
+            // Root fallback: move the temp upload into a root-owned directory.
+            $tmp = $file->getRealPath();
+            if (! $this->runRoot('mv ' . escapeshellarg($tmp) . ' ' . escapeshellarg($target) . $this->chownWww($target))) {
+                return response()->json(['error' => 'Destination not writable'], 403);
+            }
         }
         ActivityLogger::log('file.upload', "Uploaded {$name} to {$dir}");
 
@@ -194,7 +219,9 @@ class FileManagerController extends Controller
             return response()->json(['error' => 'Not found'], 404);
         }
         if (! @chmod($path, intval($request->input('mode'), 8))) {
-            return response()->json(['error' => 'Permission denied'], 403);
+            if (! $this->runRoot('chmod -R ' . escapeshellarg($request->input('mode')) . ' ' . escapeshellarg($path))) {
+                return response()->json(['error' => 'Permission denied'], 403);
+            }
         }
         ActivityLogger::log('file.chmod', "chmod {$request->input('mode')} {$path}");
 
@@ -225,16 +252,23 @@ class FileManagerController extends Controller
             return response()->json(['error' => basename($src) . ' already exists in destination'], 409);
         }
 
+        $isMove = $request->input('action') === 'move';
+        $ok = false;
         try {
-            if ($request->input('action') === 'move') {
-                if (! @rename($src, $target)) {
-                    throw new \RuntimeException('Permission denied');
-                }
-            } else {
+            $ok = $isMove ? @rename($src, $target) : (function () use ($src, $target) {
                 $this->recursiveCopy($src, $target);
-            }
+
+                return true;
+            })();
         } catch (\Throwable $e) {
-            return response()->json(['error' => $e->getMessage()], 403);
+            $ok = false;
+        }
+        if (! $ok) {
+            $shell = ($isMove ? 'mv ' : 'cp -a ') . escapeshellarg($src) . ' ' . escapeshellarg($target) . $this->chownWww($target);
+            $ok = $this->runRoot($shell);
+        }
+        if (! $ok) {
+            return response()->json(['error' => 'Permission denied'], 403);
         }
         ActivityLogger::log('file.' . $request->input('action'), "{$request->input('action')} {$src} → {$target}");
 
@@ -255,10 +289,12 @@ class FileManagerController extends Controller
             $zipName .= '.zip';
         }
         $zipPath = $dir . '/' . $zipName;
+        // Build the archive in a writable temp file, then place it (root if needed).
+        $tmpZip = tempnam(sys_get_temp_dir(), 'nexzip') . '.zip';
 
         $zip = new \ZipArchive();
-        if ($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
-            return response()->json(['error' => 'Cannot create archive (permission?)'], 403);
+        if ($zip->open($tmpZip, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            return response()->json(['error' => 'Cannot create archive'], 500);
         }
         foreach ($request->input('items') as $item) {
             $full = $this->normalize($dir . '/' . basename($item));
@@ -269,6 +305,14 @@ class FileManagerController extends Controller
             }
         }
         $zip->close();
+
+        if (! @rename($tmpZip, $zipPath)) {
+            $moved = $this->runRoot('mv ' . escapeshellarg($tmpZip) . ' ' . escapeshellarg($zipPath) . $this->chownWww($zipPath));
+            @unlink($tmpZip);
+            if (! $moved) {
+                return response()->json(['error' => 'Cannot write archive to destination'], 403);
+            }
+        }
         ActivityLogger::log('file.compress', "Compressed to {$zipPath}");
 
         return response()->json(['ok' => true]);
@@ -285,22 +329,38 @@ class FileManagerController extends Controller
         $dir = dirname($path);
         $lower = strtolower($path);
 
-        try {
-            if (str_ends_with($lower, '.zip')) {
-                $zip = new \ZipArchive();
-                if ($zip->open($path) !== true) {
-                    throw new \RuntimeException('Cannot open zip');
+        $isZip = str_ends_with($lower, '.zip');
+        $isTar = str_ends_with($lower, '.tar.gz') || str_ends_with($lower, '.tgz') || str_ends_with($lower, '.tar');
+        if (! $isZip && ! $isTar) {
+            return response()->json(['error' => 'Unsupported archive type'], 400);
+        }
+
+        $done = false;
+        if (is_writable($dir)) {
+            try {
+                if ($isZip) {
+                    $zip = new \ZipArchive();
+                    if ($zip->open($path) === true) {
+                        $zip->extractTo($dir);
+                        $zip->close();
+                        $done = true;
+                    }
+                } else {
+                    (new \PharData($path))->extractTo($dir, null, true);
+                    $done = true;
                 }
-                $zip->extractTo($dir);
-                $zip->close();
-            } elseif (str_ends_with($lower, '.tar.gz') || str_ends_with($lower, '.tgz') || str_ends_with($lower, '.tar')) {
-                $phar = new \PharData($path);
-                $phar->extractTo($dir, null, true);
-            } else {
-                return response()->json(['error' => 'Unsupported archive type'], 400);
+            } catch (\Throwable $e) {
+                $done = false;
             }
-        } catch (\Throwable $e) {
-            return response()->json(['error' => 'Extract failed: ' . $e->getMessage()], 500);
+        }
+        if (! $done) {
+            $tarflag = str_ends_with($lower, '.tar') ? 'xf' : 'xzf';
+            $extract = $isZip
+                ? 'cd ' . escapeshellarg($dir) . ' && unzip -o ' . escapeshellarg($path)
+                : 'tar ' . $tarflag . ' ' . escapeshellarg($path) . ' -C ' . escapeshellarg($dir);
+            if (! $this->runRoot($extract . $this->chownWww($dir))) {
+                return response()->json(['error' => 'Extract failed (permission?)'], 403);
+            }
         }
         ActivityLogger::log('file.extract', "Extracted {$path}");
 
@@ -329,6 +389,36 @@ class FileManagerController extends Controller
     }
 
     // ---------------------------------------------------------------- helpers
+
+    /** sudo prefix — empty when already root, non-interactive otherwise. */
+    private function sudo(): array
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            return [];
+        }
+
+        return ['sudo', '-n'];
+    }
+
+    /** Run a shell command as root via the privileged wrapper (aaPanel-style). */
+    private function runRoot(string $cmd): bool
+    {
+        $runner = '/usr/local/bin/nexpanel-run';
+        if (! is_file($runner)) {
+            return false;
+        }
+        $r = \Illuminate\Support\Facades\Process::timeout(120)->input($cmd)->run([...$this->sudo(), $runner]);
+
+        return $r->successful();
+    }
+
+    /** chown to the web user, but only inside /var/www (don't touch /etc etc.). */
+    private function chownWww(string $path): string
+    {
+        return str_starts_with($path, '/var/www/')
+            ? ' && chown -R www-data:www-data ' . escapeshellarg($path)
+            : '';
+    }
 
     private function recursiveCopy(string $src, string $dst): void
     {
