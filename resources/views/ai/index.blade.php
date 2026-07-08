@@ -265,6 +265,7 @@ function aiChat() {
         sessions: [],
         provider: '{{ $providerName ?? "" }}',
         showHistory: true,
+        autoStep: 0,
 
         async init() {
             this.currentSession = this.generateUUID();
@@ -348,12 +349,42 @@ function aiChat() {
             msg.executed = true;
             await this.loadSessions();
             this.scrollToBottom();
+
+            // Agent loop: feed the result back so the AI can do the next step
+            // (or fix an error). Each step still needs the user to click Run.
+            if (this.autoStep < 8) {
+                this.autoStep++;
+                await this.continueAfterAction(pa, msg.result);
+            }
+        },
+
+        async continueAfterAction(pa, result) {
+            this.loading = true;
+            this.scrollToBottom();
+            const note = `[Action result] "${pa.summary}" → ${result.ok ? 'SUCCESS' : 'FAILED'}: ${result.output}\n\nIf more steps are still needed to finish my original request, propose the NEXT action now (fix the problem if it failed). If everything is done, just say it's complete — do not repeat an action that already succeeded.`;
+            try {
+                const res = await fetch('/api/ai/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+                    body: JSON.stringify({ message: note, session_id: this.currentSession })
+                });
+                const data = await res.json();
+                if (!data.error) {
+                    this.messages.push({
+                        role: 'assistant', content: data.response, action: data.action || null,
+                        proposedAction: data.proposedAction || null, executed: false, running: false, result: null
+                    });
+                }
+            } catch (e) { /* ignore */ }
+            this.loading = false;
+            this.scrollToBottom();
         },
 
         async sendMessage() {
             const text = this.input.trim();
             if (!text || this.loading) return;
 
+            this.autoStep = 0;
             this.messages.push({ role: 'user', content: text });
             this.input = '';
             this.loading = true;
