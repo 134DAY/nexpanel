@@ -65,6 +65,11 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/files/rename', [FileManagerController::class, 'rename'])->name('files.rename');
     Route::post('/files/delete', [FileManagerController::class, 'delete'])->name('files.delete');
     Route::post('/files/upload', [FileManagerController::class, 'upload'])->name('files.upload');
+    Route::get('/files/info', [FileManagerController::class, 'info'])->name('files.info');
+    Route::post('/files/chmod', [FileManagerController::class, 'chmod'])->name('files.chmod');
+    Route::post('/files/transfer', [FileManagerController::class, 'transfer'])->name('files.transfer');
+    Route::post('/files/compress', [FileManagerController::class, 'compress'])->name('files.compress');
+    Route::post('/files/extract', [FileManagerController::class, 'extract'])->name('files.extract');
 
     // Cron Jobs (Phase 3)
     Route::get('/cron', [CronController::class, 'index'])->name('cron.index');

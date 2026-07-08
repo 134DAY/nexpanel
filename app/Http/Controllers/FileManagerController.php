@@ -186,7 +186,184 @@ class FileManagerController extends Controller
         return response()->download($path);
     }
 
+    public function chmod(Request $request): JsonResponse
+    {
+        $request->validate(['path' => 'required|string', 'mode' => 'required|string|regex:/^[0-7]{3,4}$/']);
+        $path = $this->normalize($request->input('path'));
+        if (! file_exists($path)) {
+            return response()->json(['error' => 'Not found'], 404);
+        }
+        if (! @chmod($path, intval($request->input('mode'), 8))) {
+            return response()->json(['error' => 'Permission denied'], 403);
+        }
+        ActivityLogger::log('file.chmod', "chmod {$request->input('mode')} {$path}");
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** Copy or move a file/dir into a destination directory. */
+    public function transfer(Request $request): JsonResponse
+    {
+        $request->validate([
+            'source' => 'required|string',
+            'dest'   => 'required|string',
+            'action' => 'required|in:copy,move',
+        ]);
+        $src = $this->normalize($request->input('source'));
+        $destDir = $this->normalize($request->input('dest'));
+        if (! file_exists($src)) {
+            return response()->json(['error' => 'Source not found'], 404);
+        }
+        if (! is_dir($destDir)) {
+            return response()->json(['error' => 'Destination is not a directory'], 400);
+        }
+        $target = $destDir . '/' . basename($src);
+        if (realpath($src) === realpath($target)) {
+            return response()->json(['error' => 'Source and destination are the same'], 400);
+        }
+        if (file_exists($target)) {
+            return response()->json(['error' => basename($src) . ' already exists in destination'], 409);
+        }
+
+        try {
+            if ($request->input('action') === 'move') {
+                if (! @rename($src, $target)) {
+                    throw new \RuntimeException('Permission denied');
+                }
+            } else {
+                $this->recursiveCopy($src, $target);
+            }
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 403);
+        }
+        ActivityLogger::log('file.' . $request->input('action'), "{$request->input('action')} {$src} → {$target}");
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** Zip one or more entries into <name>.zip in the given directory. */
+    public function compress(Request $request): JsonResponse
+    {
+        $request->validate([
+            'path'  => 'required|string',
+            'items' => 'required|array|min:1',
+            'name'  => 'required|string|max:255',
+        ]);
+        $dir = $this->normalize($request->input('path'));
+        $zipName = basename(trim($request->input('name')));
+        if (! str_ends_with(strtolower($zipName), '.zip')) {
+            $zipName .= '.zip';
+        }
+        $zipPath = $dir . '/' . $zipName;
+
+        $zip = new \ZipArchive();
+        if ($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            return response()->json(['error' => 'Cannot create archive (permission?)'], 403);
+        }
+        foreach ($request->input('items') as $item) {
+            $full = $this->normalize($dir . '/' . basename($item));
+            if (is_file($full)) {
+                $zip->addFile($full, basename($full));
+            } elseif (is_dir($full)) {
+                $this->addDirToZip($zip, $full, basename($full));
+            }
+        }
+        $zip->close();
+        ActivityLogger::log('file.compress', "Compressed to {$zipPath}");
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** Extract a .zip / .tar.gz / .tgz archive into its directory. */
+    public function extract(Request $request): JsonResponse
+    {
+        $request->validate(['path' => 'required|string']);
+        $path = $this->normalize($request->input('path'));
+        if (! is_file($path)) {
+            return response()->json(['error' => 'Archive not found'], 404);
+        }
+        $dir = dirname($path);
+        $lower = strtolower($path);
+
+        try {
+            if (str_ends_with($lower, '.zip')) {
+                $zip = new \ZipArchive();
+                if ($zip->open($path) !== true) {
+                    throw new \RuntimeException('Cannot open zip');
+                }
+                $zip->extractTo($dir);
+                $zip->close();
+            } elseif (str_ends_with($lower, '.tar.gz') || str_ends_with($lower, '.tgz') || str_ends_with($lower, '.tar')) {
+                $phar = new \PharData($path);
+                $phar->extractTo($dir, null, true);
+            } else {
+                return response()->json(['error' => 'Unsupported archive type'], 400);
+            }
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'Extract failed: ' . $e->getMessage()], 500);
+        }
+        ActivityLogger::log('file.extract', "Extracted {$path}");
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function info(Request $request): JsonResponse
+    {
+        $path = $this->normalize($request->query('path', ''));
+        if (! file_exists($path)) {
+            return response()->json(['error' => 'Not found'], 404);
+        }
+        $isDir = is_dir($path);
+
+        return response()->json([
+            'name'        => basename($path),
+            'path'        => $path,
+            'type'        => $isDir ? 'directory' : 'file',
+            'size'        => $isDir ? $this->humanSize($this->dirSize($path)) : $this->humanSize((int) @filesize($path)),
+            'permissions' => $this->permString($path),
+            'mode'        => substr(sprintf('%o', @fileperms($path)), -3),
+            'owner'       => $this->ownerName($path),
+            'modified'    => date('Y-m-d H:i:s', (int) @filemtime($path)),
+            'accessed'    => date('Y-m-d H:i:s', (int) @fileatime($path)),
+        ]);
+    }
+
     // ---------------------------------------------------------------- helpers
+
+    private function recursiveCopy(string $src, string $dst): void
+    {
+        if (is_dir($src)) {
+            if (! @mkdir($dst, 0755, true) && ! is_dir($dst)) {
+                throw new \RuntimeException('Cannot create directory');
+            }
+            foreach (array_diff(scandir($src) ?: [], ['.', '..']) as $item) {
+                $this->recursiveCopy($src . '/' . $item, $dst . '/' . $item);
+            }
+        } elseif (! @copy($src, $dst)) {
+            throw new \RuntimeException('Permission denied copying ' . basename($src));
+        }
+    }
+
+    private function addDirToZip(\ZipArchive $zip, string $dir, string $base): void
+    {
+        $zip->addEmptyDir($base);
+        foreach (array_diff(scandir($dir) ?: [], ['.', '..']) as $item) {
+            $full = $dir . '/' . $item;
+            $local = $base . '/' . $item;
+            is_dir($full) ? $this->addDirToZip($zip, $full, $local) : $zip->addFile($full, $local);
+        }
+    }
+
+    private function dirSize(string $dir): int
+    {
+        $size = 0;
+        foreach (array_diff(@scandir($dir) ?: [], ['.', '..']) as $item) {
+            $p = $dir . '/' . $item;
+            $size += is_dir($p) ? $this->dirSize($p) : (int) @filesize($p);
+        }
+
+        return $size;
+    }
 
     private function listDirectory(string $path): array
     {

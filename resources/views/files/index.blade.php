@@ -39,6 +39,11 @@
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10.5v6m3-3H9m4.06-7.19l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"/></svg>
                     New Folder
                 </button>
+                {{-- Paste (visible when clipboard has an item) --}}
+                <button x-show="clip.path" x-cloak @click="paste()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/20 text-sm font-medium transition-colors" :title="'Paste ' + clip.name">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"/></svg>
+                    <span x-text="(clip.mode === 'cut' ? 'Move' : 'Paste') + ' here'"></span>
+                </button>
             </div>
         </div>
     </div>
@@ -69,7 +74,8 @@
                 @endif
 
                 @forelse($files as $file)
-                <tr class="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group">
+                <tr class="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group"
+                    @contextmenu.prevent="openMenu($event, {name:'{{ addslashes($file['name']) }}', path:'{{ addslashes($file['path']) }}', type:'{{ $file['type'] }}'})">
                     <td class="px-3 py-3">
                         @if($file['type'] === 'directory')
                         <a href="/files?path={{ urlencode($file['path']) }}" class="flex items-center gap-2.5 text-sm font-medium text-slate-800 dark:text-white hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">
@@ -140,8 +146,74 @@
             </div>
         </div>
     </div>
+
+    {{-- Right-click context menu --}}
+    <div x-show="menu.open" x-cloak @click.outside="menu.open=false" @keydown.escape.window="menu.open=false"
+         class="fixed z-50 w-52 py-1.5 rounded-xl bg-white dark:bg-surface-800 border border-slate-200 dark:border-slate-700 shadow-2xl text-sm"
+         :style="`left:${menu.x}px; top:${menu.y}px`">
+        <template x-if="menu.item.type === 'file'">
+            <div>
+                <button @click="edit(menu.item.path); menu.open=false" class="ctx"><span>Edit</span></button>
+                <a :href="'/files/download?path='+encodeURIComponent(menu.item.path)" @click="menu.open=false" class="ctx"><span>Download</span></a>
+                <template x-if="/\.(zip|tar\.gz|tgz|tar)$/i.test(menu.item.name)"><button @click="extract(menu.item.path); menu.open=false" class="ctx"><span>Extract</span></button></template>
+            </div>
+        </template>
+        <button @click="chmodOpen(menu.item); menu.open=false" class="ctx"><span>Permission (chmod)</span></button>
+        <div class="my-1 border-t border-slate-100 dark:border-slate-700/60"></div>
+        <button @click="clipSet(menu.item,'copy'); menu.open=false" class="ctx"><span>Copy</span></button>
+        <button @click="clipSet(menu.item,'cut'); menu.open=false" class="ctx"><span>Cut</span></button>
+        <button @click="copyPath(menu.item.path); menu.open=false" class="ctx"><span>Copy Path</span></button>
+        <button @click="compressOpen(menu.item); menu.open=false" class="ctx"><span>Compress (zip)</span></button>
+        <div class="my-1 border-t border-slate-100 dark:border-slate-700/60"></div>
+        <button @click="rename(menu.item.path, menu.item.name); menu.open=false" class="ctx"><span>Rename</span></button>
+        <button @click="remove(menu.item.path, menu.item.name); menu.open=false" class="ctx text-red-500"><span>Delete</span></button>
+        <div class="my-1 border-t border-slate-100 dark:border-slate-700/60"></div>
+        <button @click="propsOpen(menu.item); menu.open=false" class="ctx"><span>Properties</span></button>
+    </div>
+
+    {{-- chmod Modal --}}
+    <div x-show="cm.open" x-cloak x-transition.opacity class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @click.self="cm.open=false">
+        <div class="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-sm">
+            <div class="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-700"><h3 class="text-base font-bold text-slate-800 dark:text-white">Permissions — <span class="font-mono text-cyan-500 text-sm" x-text="cm.name"></span></h3><button @click="cm.open=false" class="text-slate-400"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button></div>
+            <div class="p-5 space-y-4">
+                <div class="grid grid-cols-3 gap-3">
+                    <template x-for="(g,gi) in ['Owner','Group','Public']" :key="gi">
+                        <div><p class="text-xs font-semibold text-slate-500 mb-1.5" x-text="g"></p>
+                            <template x-for="(perm,pi) in ['r','w','x']" :key="pi">
+                                <label class="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300"><input type="checkbox" x-model="cm.bits[gi][pi]" class="rounded text-cyan-500"><span x-text="{r:'Read',w:'Write',x:'Exec'}[perm]"></span></label>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm text-slate-500">Mode:</span>
+                    <input x-model="cm.mode" @input="cm.syncFromMode()" class="w-20 px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 font-mono text-sm text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500" maxlength="4">
+                </div>
+                <div class="flex justify-end gap-2"><button @click="cm.open=false" class="px-4 py-2 bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 rounded-xl text-sm">Cancel</button><button @click="chmodApply()" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold rounded-xl text-sm">Apply</button></div>
+            </div>
+        </div>
+    </div>
+
+    {{-- Properties Modal --}}
+    <div x-show="props.open" x-cloak x-transition.opacity class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @click.self="props.open=false">
+        <div class="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md">
+            <div class="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-700"><h3 class="text-base font-bold text-slate-800 dark:text-white">Properties</h3><button @click="props.open=false" class="text-slate-400"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button></div>
+            <div class="p-5 space-y-2 text-sm">
+                <template x-for="(v,k) in props.data" :key="k">
+                    <div class="flex gap-3"><span class="w-28 text-slate-400 capitalize" x-text="k"></span><span class="flex-1 text-slate-700 dark:text-slate-200 font-mono break-all" x-text="v"></span></div>
+                </template>
+            </div>
+        </div>
+    </div>
 </div>
 @endsection
+
+@push('styles')
+<style>
+.ctx { display:flex; align-items:center; gap:.5rem; width:100%; text-align:left; padding:.45rem 1rem; color:inherit; }
+.ctx:hover { background: rgba(6,182,212,.1); }
+</style>
+@endpush
 
 @push('scripts')
 <script>
@@ -150,6 +222,21 @@ function fileManager(cwd) {
     return {
         cwd,
         editor: { open: false, path: '', content: '', status: '' },
+        menu: { open: false, x: 0, y: 0, item: {} },
+        clip: { path: '', name: '', mode: '' },
+        cm: { open: false, path: '', name: '', mode: '755', bits: [[false,false,false],[false,false,false],[false,false,false]],
+              syncFromMode() {
+                  const m = (this.mode || '').padStart(3,'0').slice(-3);
+                  for (let i=0;i<3;i++){ const d=parseInt(m[i]||'0',8); this.bits[i]=[!!(d&4),!!(d&2),!!(d&1)]; }
+              } },
+        props: { open: false, data: {} },
+
+        openMenu(e, item) {
+            this.menu.item = item;
+            this.menu.x = Math.min(e.clientX, window.innerWidth - 220);
+            this.menu.y = Math.min(e.clientY, window.innerHeight - 380);
+            this.menu.open = true;
+        },
 
         async post(url, body) {
             const res = await fetch(url, {
@@ -213,6 +300,55 @@ function fileManager(cwd) {
                 this.editor.status = 'Saved ✓';
                 setTimeout(() => this.editor.open = false, 600);
             } catch (e) { this.editor.status = ''; alert(e.message); }
+        },
+
+        // ---- context-menu operations ----
+        clipSet(item, mode) { this.clip = { path: item.path, name: item.name, mode }; },
+        async paste() {
+            if (!this.clip.path) return;
+            try {
+                await this.post('/files/transfer', this.form({ source: this.clip.path, dest: this.cwd, action: this.clip.mode === 'cut' ? 'move' : 'copy' }));
+                this.clip = { path: '', name: '', mode: '' };
+                location.reload();
+            } catch (e) { alert(e.message); }
+        },
+        copyPath(path) { navigator.clipboard.writeText(path).then(() => {}, () => {}); },
+        async extract(path) {
+            if (!confirm('Extract "' + path.split('/').pop() + '" here?')) return;
+            try { await this.post('/files/extract', this.form({ path })); location.reload(); } catch (e) { alert(e.message); }
+        },
+        compressOpen(item) {
+            const name = prompt('Archive name:', item.name + '.zip');
+            if (!name) return;
+            this.post('/files/compress', this.form2({ path: this.cwd, name, items: [item.name] }))
+                .then(() => location.reload()).catch(e => alert(e.message));
+        },
+        form2(obj) {
+            const fd = new FormData();
+            Object.entries(obj).forEach(([k, v]) => Array.isArray(v) ? v.forEach(x => fd.append(k + '[]', x)) : fd.append(k, v));
+            return fd;
+        },
+        chmodOpen(item) {
+            this.cm.path = item.path; this.cm.name = item.name;
+            // fetch current mode
+            fetch('/files/info?path=' + encodeURIComponent(item.path), { headers: { 'Accept': 'application/json' } })
+                .then(r => r.json()).then(d => { this.cm.mode = d.mode || '644'; this.cm.syncFromMode(); this.cm.open = true; })
+                .catch(() => { this.cm.mode = '644'; this.cm.syncFromMode(); this.cm.open = true; });
+        },
+        async chmodApply() {
+            // build mode from checkboxes
+            let mode = '';
+            for (let i=0;i<3;i++){ let d=0; if(this.cm.bits[i][0])d+=4; if(this.cm.bits[i][1])d+=2; if(this.cm.bits[i][2])d+=1; mode+=d; }
+            try { await this.post('/files/chmod', this.form({ path: this.cm.path, mode })); this.cm.open=false; location.reload(); }
+            catch (e) { alert(e.message); }
+        },
+        async propsOpen(item) {
+            this.props = { open: true, data: { name: item.name, loading: '…' } };
+            try {
+                const res = await fetch('/files/info?path=' + encodeURIComponent(item.path), { headers: { 'Accept': 'application/json' } });
+                const d = await res.json();
+                this.props.data = { name: d.name, type: d.type, size: d.size, permissions: d.permissions + ' (' + d.mode + ')', owner: d.owner, path: d.path, modified: d.modified, accessed: d.accessed };
+            } catch (e) { this.props.data = { error: e.message }; }
         },
     }
 }
