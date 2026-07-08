@@ -127,7 +127,13 @@ Available tools:
 - create_db_user  — args: {"username":"appuser","password":"secret"}
 - service         — args: {"name":"nginx|mysql|php-fpm|redis","action":"start|stop|restart"}
 - create_cron     — args: {"command":"/usr/bin/php /var/www/app/artisan schedule:run","schedule":"* * * * *"}
+- write_file      — args: {"path":"/var/www/portfolio/public/index.html","content":"<!doctype html>..."}
 - shell           — args: {"command":"apt-get install -y htop"}   (fallback)
+
+To build a site's pages, use **write_file** (NOT shell echo) with the full file
+content in "content". A site's document root is /var/www/<name>/public — write
+index.html (and style.css, etc.) there. Do one action block per message; after
+it runs you can propose the next file.
 
 Example — user says "create a website example.com":
 Sure, I'll create an Nginx site for example.com.

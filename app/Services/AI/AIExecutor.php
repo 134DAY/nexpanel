@@ -32,6 +32,7 @@ class AIExecutor
         'create_db_user'  => 'caution',
         'service'         => 'caution',
         'create_cron'     => 'caution',
+        'write_file'      => 'caution',
         'shell'           => 'caution',
     ];
 
@@ -69,6 +70,7 @@ class AIExecutor
             'create_db_user'  => "Create MySQL user {$args['username']}",
             'service'         => ucfirst($args['action'] ?? '?') . " service {$args['name']}",
             'create_cron'     => "Add cron job: {$args['command']} ({$args['schedule']})",
+            'write_file'      => "Write file {$args['path']} (" . strlen($args['content'] ?? '') . " bytes)",
             'shell'           => "Run: {$args['command']}",
             default           => $tool,
         };
@@ -154,6 +156,27 @@ class AIExecutor
                 Process::input(rtrim($cur, "\n") . "\n" . $line . "\n")->run(['crontab', '-']);
 
                 return ['ok' => true, 'output' => "Cron job added: {$line}"];
+
+            case 'write_file':
+                $path = $args['path'] ?? '';
+                $content = $args['content'] ?? '';
+                if ($path === '' || str_contains($path, "\0")) {
+                    return ['ok' => false, 'output' => 'Invalid path.'];
+                }
+                @mkdir(dirname($path), 0755, true);
+                if (@file_put_contents($path, $content) !== false) {
+                    return ['ok' => true, 'output' => 'Wrote ' . strlen($content) . " bytes to {$path}."];
+                }
+                // Root-owned location: write as root via the runner (base64 avoids
+                // any content-quoting issues).
+                $cmd = 'mkdir -p ' . escapeshellarg(dirname($path))
+                    . ' && echo ' . escapeshellarg(base64_encode($content)) . ' | base64 -d > ' . escapeshellarg($path)
+                    . ' && chown www-data:www-data ' . escapeshellarg($path);
+                $r = self::shellRoot($cmd);
+
+                return $r['ok']
+                    ? ['ok' => true, 'output' => 'Wrote ' . strlen($content) . " bytes to {$path} (as root)."]
+                    : ['ok' => false, 'output' => "Cannot write {$path}: " . $r['output']];
 
             case 'shell':
                 return self::shellRoot($args['command'] ?? '');
