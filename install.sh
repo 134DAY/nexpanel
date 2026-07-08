@@ -183,7 +183,10 @@ if [ ! -d /usr/share/phpmyadmin ]; then
     fi
 fi
 if [ -d /usr/share/phpmyadmin ] && [ ! -f /usr/share/phpmyadmin/config.inc.php ]; then
-    mkdir -p /usr/share/phpmyadmin/tmp
+    # TempDir must live outside /usr — php-fpm's ProtectSystem makes /usr
+    # read-only for the web process, so a tmp under /usr can't be written.
+    mkdir -p /var/lib/phpmyadmin/tmp
+    chown -R "$APP_USER":"$APP_USER" /var/lib/phpmyadmin
     PMA_SECRET="$(openssl rand -hex 16)"
     cat > /usr/share/phpmyadmin/config.inc.php <<PMA
 <?php
@@ -192,10 +195,13 @@ if [ -d /usr/share/phpmyadmin ] && [ ! -f /usr/share/phpmyadmin/config.inc.php ]
 \$cfg['Servers'][\$i]['auth_type'] = 'cookie';
 \$cfg['Servers'][\$i]['host'] = '127.0.0.1';
 \$cfg['Servers'][\$i]['AllowNoPassword'] = false;
-\$cfg['TempDir'] = '/usr/share/phpmyadmin/tmp';
+\$cfg['TempDir'] = '/var/lib/phpmyadmin/tmp';
 PMA
     chown -R "$APP_USER":"$APP_USER" /usr/share/phpmyadmin
 fi
+
+# Remove MySQL anonymous users (security + avoids a confusing anon login).
+mysql -e "DELETE FROM mysql.user WHERE User=''; FLUSH PRIVILEGES;" 2>/dev/null || true
 
 # ---- 7. nginx vhost for the panel --------------------------------------
 log "Configuring Nginx site for the panel"
