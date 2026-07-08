@@ -149,6 +149,39 @@ class DatabaseController extends Controller
         }
     }
 
+    /**
+     * Auto-login to phpMyAdmin (aaPanel-style). Writes a one-time signon token,
+     * then redirects into phpMyAdmin logged in as the right user: the db's own
+     * paired user when $name is given, otherwise the admin user.
+     */
+    public function pmaLogin(Request $request, ?string $name = null)
+    {
+        if ($name) {
+            $cred = DbCredential::where('db_name', $name)->first();
+            if (! $cred) {
+                return redirect()->route('databases.index')->with('error', "No stored user for '{$name}'. Use the admin phpMyAdmin button.");
+            }
+            $user = $cred->username;
+            $pass = $cred->password;
+        } else {
+            $user = (string) config('nexpanel.db_admin.user', 'root');
+            $pass = (string) config('nexpanel.db_admin.password', '');
+        }
+
+        $token = bin2hex(random_bytes(16));
+        $dir = '/var/lib/phpmyadmin/signon';
+        @mkdir($dir, 0700, true);
+        @file_put_contents("{$dir}/{$token}.json", json_encode(['user' => $user, 'pass' => $pass, 't' => time()]));
+        @chmod("{$dir}/{$token}.json", 0600);
+
+        $url = '/pma-signon/signon.php?token=' . $token;
+        if ($name) {
+            $url .= '&db=' . rawurlencode($name);
+        }
+
+        return redirect($url);
+    }
+
     public function backup(Request $request, string $name): BinaryFileResponse
     {
         abort_unless($this->mysql->available(), 400, 'MySQL not available');

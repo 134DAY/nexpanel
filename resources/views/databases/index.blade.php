@@ -41,7 +41,7 @@
         </div>
         <div class="flex items-center gap-2">
             @if($phpmyadmin)
-            <a href="/phpmyadmin/" target="_blank" class="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/10 font-semibold rounded-xl transition-all text-sm">
+            <a href="/databases-pma" target="_blank" class="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/10 font-semibold rounded-xl transition-all text-sm">
                 <svg class="w-4 h-4 text-orange-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15H9v-6h2v6zm4 0h-2v-6h2v6z"/></svg>
                 phpMyAdmin
             </a>
@@ -68,7 +68,7 @@
                 @forelse($databases as $db)
                 <tr class="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors" x-data="{ show:false }">
                     <td class="px-5 py-3">
-                        <a @if($phpmyadmin) href="/phpmyadmin/index.php?db={{ urlencode($db['name']) }}" target="_blank" @endif class="flex items-center gap-2.5 text-sm font-semibold text-slate-800 dark:text-white font-mono @if($phpmyadmin) hover:text-cyan-600 dark:hover:text-cyan-400 @endif">
+                        <a @if($phpmyadmin) href="/databases/{{ urlencode($db['name']) }}/pma" target="_blank" @endif class="flex items-center gap-2.5 text-sm font-semibold text-slate-800 dark:text-white font-mono @if($phpmyadmin) hover:text-cyan-600 dark:hover:text-cyan-400 @endif">
                             <span class="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center shrink-0"><svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375"/></svg></span>
                             {{ $db['name'] }}
                         </a>
@@ -90,7 +90,7 @@
                     <td class="px-5 py-3">
                         <div class="flex items-center justify-end gap-1 text-slate-400">
                             @if($phpmyadmin)
-                            <a href="/phpmyadmin/index.php?db={{ urlencode($db['name']) }}" target="_blank" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 hover:text-orange-500" title="Open in phpMyAdmin"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15H9v-6h2v6zm4 0h-2v-6h2v6z"/></svg></a>
+                            <a href="/databases/{{ urlencode($db['name']) }}/pma" target="_blank" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 hover:text-orange-500" title="Open in phpMyAdmin"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15H9v-6h2v6zm4 0h-2v-6h2v6z"/></svg></a>
                             @endif
                             <button @click="openImport('{{ $db['name'] }}')" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 hover:text-blue-500" title="Import .sql"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg></button>
                             <a href="/databases/{{ urlencode($db['name']) }}/backup" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 hover:text-emerald-500" title="Backup"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg></a>

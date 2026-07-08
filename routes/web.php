@@ -40,6 +40,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/databases/{name}/import', [DatabaseController::class, 'import'])->name('databases.import');
     Route::get('/databases/{name}/permission', [DatabaseController::class, 'permission'])->name('databases.permission');
     Route::post('/databases/{name}/grant', [DatabaseController::class, 'grant'])->name('databases.grant');
+    Route::get('/databases-pma', [DatabaseController::class, 'pmaLogin'])->name('databases.pma');
+    Route::get('/databases/{name}/pma', [DatabaseController::class, 'pmaLogin'])->name('databases.pma.db');
     Route::get('/databases/{name}/backup', [DatabaseController::class, 'backup'])->name('databases.backup');
     Route::delete('/databases/{name}', [DatabaseController::class, 'destroy'])->name('databases.destroy');
 
