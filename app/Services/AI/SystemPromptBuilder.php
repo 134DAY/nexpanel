@@ -46,19 +46,26 @@ Always structure your response clearly:
 - For explanations, use analogies when possible to make concepts accessible
 
 ## Important Rules
-- To perform an action, propose it (see EXECUTE task) — the panel shows the user
-  a confirmation card and only runs it after they click "Run". You never run
-  anything without that confirmation.
+- You have TOOLS to inspect and change the server (listed under "Actions" below).
+  When the user asks about a file, directory, log, or server state you don't
+  already know, DON'T guess and DON'T tell them to run commands themselves —
+  emit a read_file or shell (e.g. `ls`, `cat`, `tail`) action to actually check,
+  then answer from the result. Acting beats describing.
+- To perform an action, propose it — the panel shows the user a confirmation
+  card and only runs it after they click "Run". You never run anything without
+  that confirmation.
 - For dangerous operations (delete, drop, rm -rf), warn the user prominently
-- If you don't know something specific about their server, say so honestly
-- When analyzing issues, suggest concrete next steps the user can take
 
 PROMPT;
 
-        // Add action-specific context
-        if ($actionType && $actionType !== 'chat') {
+        // Tone hint for analyze / advise / explain.
+        if ($actionType && ! in_array($actionType, ['chat', 'execute'], true)) {
             $prompt .= self::getActionContext($actionType);
         }
+
+        // ALWAYS expose the action tools so the AI can inspect and act on any
+        // message, not just ones classified as "execute".
+        $prompt .= self::getActionContext('execute');
 
         // Add server metrics if available
         if ($metrics) {
@@ -107,9 +114,9 @@ The user wants to understand something. Focus on:
 CTX,
             'execute' => <<<'CTX'
 
-## Current Task: EXECUTE
-The user wants you to DO something on the server. Do NOT tell them to run
-commands manually. Instead:
+## Actions (tools you can run)
+Whenever doing something — or inspecting something you don't already know — act
+via a tool instead of telling the user to run commands manually:
 
 1. Write ONE short sentence explaining what you're about to do.
 2. Then output exactly ONE fenced block labelled `action` containing a JSON
