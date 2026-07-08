@@ -65,8 +65,8 @@ class DatabaseController extends Controller
                 'username' => 'nullable|string|max:32',
                 'password' => 'nullable|string|max:255',
             ]);
-            $user = $data['username'] ?: $data['name'];
-            $password = $data['password'] ?: Str::random(16);
+            $user = ($data['username'] ?? null) ?: $data['name'];
+            $password = ($data['password'] ?? null) ?: Str::random(16);
 
             $this->mysql->createDatabaseWithUser($data['name'], $user, $password, $data['charset'] ?? 'utf8mb4');
             DbCredential::updateOrCreate(['db_name' => $data['name']], ['username' => $user, 'password' => $password]);
