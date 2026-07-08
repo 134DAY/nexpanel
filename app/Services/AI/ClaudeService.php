@@ -8,7 +8,7 @@ class ClaudeService implements AIServiceInterface
 {
     public function __construct(
         private readonly string $apiKey,
-        private readonly string $model = 'claude-sonnet-4-20250514'
+        private readonly string $model = 'claude-sonnet-4-6'
     ) {}
 
     public function chat(array $messages, string $systemPrompt): string

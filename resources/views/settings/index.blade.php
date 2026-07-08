@@ -116,8 +116,9 @@
                             {{-- Claude --}}
                             <template x-if="selectedProvider === 'claude'">
                                 <optgroup label="Claude Models">
-                                    <option value="claude-sonnet-4-20250514" {{ ($setting->model ?? '') === 'claude-sonnet-4-20250514' ? 'selected' : '' }}>Claude Sonnet 4 — Latest</option>
-                                    <option value="claude-3-5-haiku-20241022" {{ ($setting->model ?? '') === 'claude-3-5-haiku-20241022' ? 'selected' : '' }}>Claude 3.5 Haiku — Fast & cheap</option>
+                                    <option value="claude-sonnet-4-6" {{ ($setting->model ?? '') === 'claude-sonnet-4-6' ? 'selected' : '' }}>Claude Sonnet 4.6 — Recommended</option>
+                                    <option value="claude-opus-4-8" {{ ($setting->model ?? '') === 'claude-opus-4-8' ? 'selected' : '' }}>Claude Opus 4.8 — Best quality</option>
+                                    <option value="claude-haiku-4-5-20251001" {{ ($setting->model ?? '') === 'claude-haiku-4-5-20251001' ? 'selected' : '' }}>Claude Haiku 4.5 — Fast &amp; cheap</option>
                                 </optgroup>
                             </template>
                             {{-- Gemini --}}
