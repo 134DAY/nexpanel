@@ -93,7 +93,7 @@
                             <a href="/databases/{{ urlencode($db['name']) }}/pma" target="_blank" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 hover:text-orange-500" title="Open in phpMyAdmin"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15H9v-6h2v6zm4 0h-2v-6h2v6z"/></svg></a>
                             @endif
                             <button @click="openImport('{{ $db['name'] }}')" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 hover:text-blue-500" title="Import .sql"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg></button>
-                            <a href="/databases/{{ urlencode($db['name']) }}/backup" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 hover:text-emerald-500" title="Backup"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg></a>
+                            <button @click="openBackup('{{ $db['name'] }}')" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 hover:text-emerald-500" title="Backup"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg></button>
                             <button @click="openPerm('{{ $db['name'] }}')" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 hover:text-violet-500" title="Permission"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg></button>
                             <button @click="openPwd('{{ $db['name'] }}')" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 hover:text-amber-500" title="Change password"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg></button>
                             <button @click="dropDb('{{ $db['name'] }}')" class="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-500" title="Delete"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79"/></svg></button>
@@ -182,8 +182,8 @@
             <div class="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-700"><h3 class="text-lg font-bold text-slate-800 dark:text-white">Import into <span class="font-mono text-cyan-500" x-text="imp.db"></span></h3><button @click="imp.open=false" class="text-slate-400"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button></div>
             <form :action="'/databases/'+encodeURIComponent(imp.db)+'/import'" method="POST" enctype="multipart/form-data" class="p-6 space-y-4">
                 @csrf
-                <input type="file" name="file" accept=".sql,.txt" required class="w-full text-sm text-slate-600 dark:text-slate-300 file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-cyan-500 file:text-white file:text-sm file:font-medium">
-                <p class="text-xs text-slate-400">Upload a .sql dump (max 50 MB). It will run against this database.</p>
+                <input type="file" name="file" accept=".sql,.txt,.gz,.zip,.tgz" required class="w-full text-sm text-slate-600 dark:text-slate-300 file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-cyan-500 file:text-white file:text-sm file:font-medium">
+                <p class="text-xs text-slate-400">Supports .sql, .gz, .tar.gz, .zip (max 500 MB). It will run against this database.</p>
                 <div class="flex gap-3"><button type="submit" class="flex-1 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold rounded-xl text-sm">Import</button><button type="button" @click="imp.open=false" class="px-4 py-2.5 bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 rounded-xl text-sm">Cancel</button></div>
             </form>
         </div>
@@ -224,6 +224,65 @@
             </div>
         </div>
     </div>
+
+    {{-- Backup Manager Modal --}}
+    <div x-show="bk.open" x-cloak x-transition.opacity class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @click.self="bk.open=false">
+        <div class="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl flex flex-col" style="max-height:85vh">
+            <div class="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-700">
+                <h3 class="text-lg font-bold text-slate-800 dark:text-white">Backups — <span class="font-mono text-emerald-500" x-text="bk.db"></span></h3>
+                <div class="flex items-center gap-2">
+                    <button @click="doBackup()" :disabled="bk.busy" class="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-sm font-semibold disabled:opacity-50">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+                        <span x-text="bk.busy ? 'Backing up…' : 'Backup now'"></span>
+                    </button>
+                    <button @click="bk.open=false" class="text-slate-400"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+                </div>
+            </div>
+            <div class="overflow-auto">
+                <table class="w-full text-sm">
+                    <thead class="sticky top-0"><tr class="bg-slate-50 dark:bg-white/5">
+                        <th class="text-left px-5 py-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400">File</th>
+                        <th class="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400">Size</th>
+                        <th class="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400">Time</th>
+                        <th class="text-right px-5 py-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400">Operate</th>
+                    </tr></thead>
+                    <tbody class="divide-y divide-slate-100 dark:divide-slate-800/40">
+                        <template x-for="f in bk.files" :key="f.name">
+                            <tr class="hover:bg-slate-50 dark:hover:bg-white/[0.02]">
+                                <td class="px-5 py-2.5 font-mono text-xs text-slate-700 dark:text-slate-300 max-w-xs truncate" x-text="f.name"></td>
+                                <td class="px-3 py-2.5 text-xs text-slate-500" x-text="f.size"></td>
+                                <td class="px-3 py-2.5 text-xs text-slate-500" x-text="f.time"></td>
+                                <td class="px-5 py-2.5 text-right whitespace-nowrap">
+                                    <button @click="doRestore(f.name)" class="text-xs font-medium text-cyan-600 dark:text-cyan-400 hover:underline">Recover</button>
+                                    <a :href="'/databases/'+encodeURIComponent(bk.db)+'/backups/download?file='+encodeURIComponent(f.name)" class="text-xs font-medium text-slate-500 hover:underline ml-2">Download</a>
+                                    <button @click="doDeleteBackup(f.name)" class="text-xs font-medium text-red-500 hover:underline ml-2">Delete</button>
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-if="!bk.files.length"><tr><td colspan="4" class="px-5 py-8 text-center text-sm text-slate-400">No backups yet. Click “Backup now”.</td></tr></template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    {{-- Two-step Delete Modal --}}
+    <div x-show="del.open" x-cloak x-transition.opacity class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @click.self="del.open=false">
+        <div class="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md">
+            <div class="flex items-center gap-3 p-5 border-b border-slate-200 dark:border-slate-700">
+                <div class="w-9 h-9 rounded-full bg-red-100 dark:bg-red-500/15 flex items-center justify-center shrink-0"><svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg></div>
+                <h3 class="text-lg font-bold text-slate-800 dark:text-white">Delete database</h3>
+            </div>
+            <div class="p-5 space-y-3">
+                <p class="text-sm text-slate-600 dark:text-slate-300">The data will be <strong class="text-red-500">completely deleted and cannot be recovered</strong>. Type <code class="px-1 rounded bg-slate-100 dark:bg-white/10 text-red-500" x-text="del.db"></code> to confirm.</p>
+                <input type="text" x-model="del.confirm" @keydown.enter="confirmDrop()" placeholder="Type the database name" class="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-red-500">
+                <div class="flex justify-end gap-2 pt-1">
+                    <button @click="del.open=false" class="px-4 py-2 bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 rounded-xl text-sm">Cancel</button>
+                    <button @click="confirmDrop()" :disabled="del.confirm !== del.db" class="px-4 py-2 bg-red-500 text-white font-semibold rounded-xl text-sm disabled:opacity-40 disabled:cursor-not-allowed">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 @endsection
 
@@ -237,6 +296,8 @@ function databasePage() {
         imp: { open: false, db: '' },
         pwd: { open: false, db: '', value: '' },
         perm: { open: false, db: '', username: '', grants: [], databases: [], newDb: '' },
+        bk: { open: false, db: '', files: [], busy: false },
+        del: { open: false, db: '', confirm: '' },
 
         gen() { return Array.from(crypto.getRandomValues(new Uint8Array(12))).map(b => 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[b % 62]).join(''); },
         openImport(db) { this.imp = { open: true, db }; },
@@ -257,7 +318,44 @@ function databasePage() {
                 await this.openPerm(this.perm.db);
             } catch (e) { alert(e.message); }
         },
-        dropDb(name) { if (!confirm('Drop database "' + name + '" and its user? All data lost.')) return; const f = this.$refs.dropDbForm; f.action = '/databases/' + encodeURIComponent(name); f.submit(); },
+        dropDb(name) { this.del = { open: true, db: name, confirm: '' }; },
+        confirmDrop() {
+            if (this.del.confirm !== this.del.db) return;
+            const f = this.$refs.dropDbForm; f.action = '/databases/' + encodeURIComponent(this.del.db); f.submit();
+        },
+
+        async openBackup(db) {
+            this.bk = { open: true, db, files: [], busy: false };
+            await this.loadBackups();
+        },
+        async loadBackups() {
+            try {
+                const res = await fetch(`/databases/${encodeURIComponent(this.bk.db)}/backups`, { headers: { 'Accept': 'application/json' } });
+                const d = await res.json(); this.bk.files = d.backups || [];
+            } catch (e) { alert(e.message); }
+        },
+        async bkCall(path, body) {
+            const res = await fetch(`/databases/${encodeURIComponent(this.bk.db)}/backups${path}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                body: JSON.stringify(body || {})
+            });
+            const d = await res.json(); if (!res.ok) throw new Error(d.error || 'Error'); return d;
+        },
+        async doBackup() {
+            this.bk.busy = true;
+            try { const d = await this.bkCall('', {}); this.bk.files = d.backups || []; }
+            catch (e) { alert(e.message); } this.bk.busy = false;
+        },
+        async doRestore(file) {
+            if (!confirm('Recover from "' + file + '"? Current data in this database will be overwritten.')) return;
+            try { await this.bkCall('/restore', { file }); alert('Database recovered from ' + file); }
+            catch (e) { alert(e.message); }
+        },
+        async doDeleteBackup(file) {
+            if (!confirm('Delete backup "' + file + '"?')) return;
+            try { const d = await this.bkCall('/delete', { file }); this.bk.files = d.backups || []; }
+            catch (e) { alert(e.message); }
+        },
         dropUser(u, h) { if (!confirm('Drop user "' + u + '@' + h + '"?')) return; this.$refs.duUser.value = u; this.$refs.duHost.value = h; this.$refs.dropUserForm.submit(); },
     }
 }

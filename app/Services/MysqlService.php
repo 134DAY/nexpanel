@@ -215,22 +215,122 @@ class MysqlService
     }
 
     /** Import a .sql dump into a database via the mysql client. */
-    public function importSql(string $db, string $file): void
+    /** Import a dump into a database. Supports .sql, .gz, .tar.gz/.tgz, .zip. */
+    public function importSql(string $db, string $file, string $origName = ''): void
     {
         $this->assertIdentifier($db);
-        $host = config('nexpanel.db_admin.host', '127.0.0.1');
-        $user = config('nexpanel.db_admin.user', 'root');
-        $pass = config('nexpanel.db_admin.password', '');
-        $args = ['mysql', '-h', $host, '-u', $user];
-        if ($pass !== '') {
-            $args[] = '-p' . $pass;
-        }
-        $args[] = $db;
+        $name = strtolower($origName ?: $file);
 
-        $result = Process::timeout(300)->input((string) file_get_contents($file))->run($args);
+        if (str_ends_with($name, '.tar.gz') || str_ends_with($name, '.tgz')) {
+            $src = 'tar xzO -f ' . escapeshellarg($file);
+        } elseif (str_ends_with($name, '.gz')) {
+            $src = 'gunzip -c ' . escapeshellarg($file);
+        } elseif (str_ends_with($name, '.zip')) {
+            $src = 'unzip -p ' . escapeshellarg($file);
+        } else {
+            $src = 'cat ' . escapeshellarg($file);
+        }
+
+        $cmd = $src . ' | ' . $this->mysqlCli($db);
+        $result = Process::timeout(600)->run(['bash', '-c', $cmd]);
         if (! $result->successful()) {
             throw new \RuntimeException(trim($result->errorOutput() ?: $result->output()) ?: 'Import failed.');
         }
+    }
+
+    // ---------------------------------------------------------------- backups
+
+    /** Directory where this database's backups live (web-user owned). */
+    public function backupsDir(string $db): string
+    {
+        $this->assertIdentifier($db);
+        $dir = storage_path('app/backups/' . $db);
+        @mkdir($dir, 0755, true);
+
+        return $dir;
+    }
+
+    /** Create a timestamped gzip backup. Returns the file path. */
+    public function createBackup(string $db): string
+    {
+        $this->assertIdentifier($db);
+        $file = $this->backupsDir($db) . '/' . $db . '_' . date('Ymd_His') . '.sql.gz';
+        $cmd = $this->mysqldumpCli($db) . ' | gzip > ' . escapeshellarg($file);
+        $result = Process::timeout(600)->run(['bash', '-c', $cmd]);
+        if (! $result->successful() || ! is_file($file)) {
+            @unlink($file);
+            throw new \RuntimeException(trim($result->errorOutput()) ?: 'Backup failed.');
+        }
+
+        return $file;
+    }
+
+    public function listBackups(string $db): array
+    {
+        $dir = $this->backupsDir($db);
+        $files = glob($dir . '/*') ?: [];
+        $out = [];
+        foreach ($files as $f) {
+            if (! is_file($f)) {
+                continue;
+            }
+            $out[] = [
+                'name' => basename($f),
+                'size' => $this->humanSize((int) @filesize($f)),
+                'time' => date('Y-m-d H:i:s', (int) @filemtime($f)),
+            ];
+        }
+        usort($out, fn($a, $b) => strcmp($b['time'], $a['time']));
+
+        return $out;
+    }
+
+    public function restoreBackup(string $db, string $filename): void
+    {
+        $this->assertIdentifier($db);
+        $file = $this->backupsDir($db) . '/' . basename($filename);
+        if (! is_file($file)) {
+            throw new \RuntimeException('Backup file not found.');
+        }
+        $this->importSql($db, $file, $filename);
+    }
+
+    public function deleteBackup(string $db, string $filename): void
+    {
+        $file = $this->backupsDir($db) . '/' . basename($filename);
+        if (is_file($file)) {
+            @unlink($file);
+        }
+    }
+
+    public function backupPath(string $db, string $filename): ?string
+    {
+        $file = $this->backupsDir($db) . '/' . basename($filename);
+
+        return is_file($file) ? $file : null;
+    }
+
+    private function mysqlCli(string $db): string
+    {
+        return $this->clientBase('mysql') . ' ' . escapeshellarg($db);
+    }
+
+    private function mysqldumpCli(string $db): string
+    {
+        return $this->clientBase('mysqldump') . ' ' . escapeshellarg($db);
+    }
+
+    private function clientBase(string $bin): string
+    {
+        $host = config('nexpanel.db_admin.host', '127.0.0.1');
+        $user = config('nexpanel.db_admin.user', 'root');
+        $pass = config('nexpanel.db_admin.password', '');
+        $cmd = $bin . ' -h ' . escapeshellarg($host) . ' -u ' . escapeshellarg($user);
+        if ($pass !== '') {
+            $cmd .= ' -p' . escapeshellarg($pass);
+        }
+
+        return $cmd;
     }
 
     public function primaryKey(string $db, string $table): ?string

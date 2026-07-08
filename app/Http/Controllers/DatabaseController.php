@@ -99,18 +99,71 @@ class DatabaseController extends Controller
 
     public function import(Request $request, string $name)
     {
-        $request->validate(['file' => 'required|file|mimes:sql,txt|max:51200']);
+        $request->validate(['file' => 'required|file|mimes:sql,txt,gz,zip,tgz,gzip|max:512000']);
         if (! $this->mysql->available()) {
             return back()->with('error', 'Cannot connect to MySQL.');
         }
         try {
-            $this->mysql->importSql($name, $request->file('file')->getRealPath());
-            ActivityLogger::log('database.import', "Imported SQL into {$name}");
+            $file = $request->file('file');
+            $this->mysql->importSql($name, $file->getRealPath(), $file->getClientOriginalName());
+            ActivityLogger::log('database.import', "Imported {$file->getClientOriginalName()} into {$name}");
 
-            return back()->with('success', "SQL imported into '{$name}'.");
+            return back()->with('success', "Imported into '{$name}'.");
         } catch (\Throwable $e) {
             return back()->with('error', 'Import failed: ' . $e->getMessage());
         }
+    }
+
+    // -------- backup management (aaPanel-style) --------
+
+    public function backups(Request $request, string $name): JsonResponse
+    {
+        return response()->json(['backups' => $this->mysql->listBackups($name)]);
+    }
+
+    public function createBackup(Request $request, string $name): JsonResponse
+    {
+        if (! $this->mysql->available()) {
+            return response()->json(['error' => 'MySQL not available'], 400);
+        }
+        try {
+            $file = $this->mysql->createBackup($name);
+            ActivityLogger::log('database.backup', "Created backup of {$name}: " . basename($file));
+
+            return response()->json(['ok' => true, 'backups' => $this->mysql->listBackups($name)]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    public function restoreBackup(Request $request, string $name): JsonResponse
+    {
+        $data = $request->validate(['file' => 'required|string']);
+        try {
+            $this->mysql->restoreBackup($name, $data['file']);
+            ActivityLogger::log('database.restore', "Restored {$name} from {$data['file']}", 'warning');
+
+            return response()->json(['ok' => true]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    public function deleteBackup(Request $request, string $name): JsonResponse
+    {
+        $data = $request->validate(['file' => 'required|string']);
+        $this->mysql->deleteBackup($name, $data['file']);
+        ActivityLogger::log('database.backup.delete', "Deleted backup {$data['file']} of {$name}");
+
+        return response()->json(['ok' => true, 'backups' => $this->mysql->listBackups($name)]);
+    }
+
+    public function downloadBackup(Request $request, string $name): BinaryFileResponse
+    {
+        $path = $this->mysql->backupPath($name, (string) $request->query('file'));
+        abort_unless($path, 404, 'Backup not found');
+
+        return response()->download($path);
     }
 
     public function permission(Request $request, string $name): JsonResponse

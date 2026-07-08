@@ -43,6 +43,11 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/databases-pma', [DatabaseController::class, 'pmaLogin'])->name('databases.pma');
     Route::get('/databases/{name}/pma', [DatabaseController::class, 'pmaLogin'])->name('databases.pma.db');
     Route::get('/databases/{name}/backup', [DatabaseController::class, 'backup'])->name('databases.backup');
+    Route::get('/databases/{name}/backups', [DatabaseController::class, 'backups'])->name('databases.backups');
+    Route::post('/databases/{name}/backups', [DatabaseController::class, 'createBackup'])->name('databases.backups.create');
+    Route::post('/databases/{name}/backups/restore', [DatabaseController::class, 'restoreBackup'])->name('databases.backups.restore');
+    Route::post('/databases/{name}/backups/delete', [DatabaseController::class, 'deleteBackup'])->name('databases.backups.delete');
+    Route::get('/databases/{name}/backups/download', [DatabaseController::class, 'downloadBackup'])->name('databases.backups.download');
     Route::delete('/databases/{name}', [DatabaseController::class, 'destroy'])->name('databases.destroy');
 
     // SSL Certificates (Phase 3)
