@@ -29,6 +29,7 @@ class AIExecutor
         'toggle_website'  => 'caution',
         'create_database' => 'caution',
         'drop_database'   => 'dangerous',
+        'sql'             => 'caution',
         'create_db_user'  => 'caution',
         'service'         => 'caution',
         'create_cron'     => 'caution',
@@ -64,10 +65,11 @@ class AIExecutor
     {
         return match ($tool) {
             'create_website'  => "Create Nginx vhost for {$args['domain']}" . (($args['ssl'] ?? false) ? ' with SSL' : ''),
-            'delete_website'  => "Delete Nginx vhost {$args['domain']}",
+            'delete_website'  => "Delete website {$args['domain']} (vhost + files)",
             'toggle_website'  => "Enable/disable vhost {$args['domain']}",
             'create_database' => "Create MySQL database {$args['name']}",
             'drop_database'   => "Drop MySQL database {$args['name']}",
+            'sql'             => "Run SQL on {$args['database']}: " . mb_strimwidth($args['query'] ?? '', 0, 80, '…'),
             'create_db_user'  => "Create MySQL user {$args['username']}",
             'service'         => ucfirst($args['action'] ?? '?') . " service {$args['name']}",
             'create_cron'     => "Add cron job: {$args['command']} ({$args['schedule']})",
@@ -116,9 +118,9 @@ class AIExecutor
                 return ['ok' => true, 'output' => $msg . " Starter page created at {$docRoot}."];
 
             case 'delete_website':
-                (new NginxService())->deleteSite($args['domain']);
+                (new NginxService())->deleteSite($args['domain'], withFiles: true);
 
-                return ['ok' => true, 'output' => "Deleted vhost {$args['domain']}."];
+                return ['ok' => true, 'output' => "Deleted vhost {$args['domain']} and its files."];
 
             case 'toggle_website':
                 $en = (new NginxService())->toggleSite($args['domain']);
@@ -134,6 +136,14 @@ class AIExecutor
                 (new MysqlService())->dropDatabase($args['name']);
 
                 return ['ok' => true, 'output' => "Database {$args['name']} dropped."];
+
+            case 'sql':
+                $res = (new MysqlService())->runQuery($args['database'] ?? '', $args['query'] ?? '');
+                $out = $res['affected'] !== null
+                    ? ($res['affected'] . ' rows affected.')
+                    : (count($res['rows']) . ' rows returned: ' . json_encode(array_slice($res['rows'], 0, 30)));
+
+                return ['ok' => true, 'output' => $out];
 
             case 'create_db_user':
                 (new MysqlService())->createUser($args['username'], $args['password'] ?? '', $args['host'] ?? 'localhost');

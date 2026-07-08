@@ -111,15 +111,41 @@ class NginxService
         return $enabled;
     }
 
-    public function deleteSite(string $site): void
+    public function deleteSite(string $site, bool $withFiles = false): void
     {
         $name = basename($site);
-        @unlink($this->enabled . '/' . $name);
         $confPath = $this->available . '/' . $name;
+
+        // Figure out the site directory to remove (before deleting the config).
+        $siteDir = null;
+        if ($withFiles && is_file($confPath)) {
+            $docRoot = $this->parseRoot((string) @file_get_contents($confPath));
+            if ($docRoot) {
+                $siteDir = basename($docRoot) === 'public' ? dirname($docRoot) : $docRoot;
+            }
+        }
+
+        @unlink($this->enabled . '/' . $name);
         if (is_file($confPath) && ! @unlink($confPath)) {
             throw new \RuntimeException('Cannot delete config (need root permission).');
         }
         $this->testAndReload();
+
+        // Remove the site files (guarded: only under /var/www, never the panel).
+        if ($siteDir
+            && str_starts_with($siteDir, '/var/www/')
+            && ! in_array(rtrim($siteDir, '/'), ['/var/www', '/var/www/html', '/var/www/nexpanel'], true)) {
+            $this->runRoot('rm -rf ' . escapeshellarg($siteDir));
+        }
+    }
+
+    /** Run a command as root via the privileged wrapper (for /var/www writes). */
+    private function runRoot(string $cmd): void
+    {
+        $runner = '/usr/local/bin/nexpanel-run';
+        if (is_file($runner)) {
+            Process::timeout(60)->input($cmd)->run([...$this->sudo(), $runner]);
+        }
     }
 
     // ---------------------------------------------------------------- helpers

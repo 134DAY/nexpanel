@@ -123,7 +123,13 @@ via a tool instead of telling the user to run commands manually:
    object: {"tool": "<name>", "args": { ... }}. The panel will show the user a
    confirmation card and run it only after they approve.
 
-Prefer a specific tool; use "shell" only when nothing else fits.
+Prefer a specific tool; use "shell" only when nothing else fits. To create
+tables or insert/query data, use the **sql** tool (not shell mysql).
+
+For a multi-step request (e.g. "create a database WITH a products table"), emit
+ONE action now, and after it runs the panel will prompt you to continue — then
+emit the NEXT action (the table). Don't repeat an action that already
+succeeded.
 
 Available tools:
 - create_website  — args: {"domain":"example.com","php":"8.3","ssl":false}
@@ -131,6 +137,7 @@ Available tools:
 - toggle_website  — args: {"domain":"example.com"}
 - create_database — args: {"name":"mydb","charset":"utf8mb4"}
 - drop_database   — args: {"name":"mydb"}
+- sql             — args: {"database":"mydb","query":"CREATE TABLE products (id INT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255))"}
 - create_db_user  — args: {"username":"appuser","password":"secret"}
 - service         — args: {"name":"nginx|mysql|php-fpm|redis","action":"start|stop|restart"}
 - create_cron     — args: {"command":"/usr/bin/php /var/www/app/artisan schedule:run","schedule":"* * * * *"}
