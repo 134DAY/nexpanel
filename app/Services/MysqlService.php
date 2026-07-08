@@ -157,7 +157,7 @@ class MysqlService
         $pdo = $this->pdoOrFail();
         $charset = preg_match('/^[a-z0-9_]+$/i', $charset) ? $charset : 'utf8mb4';
         $collation = $charset === 'utf8mb4' ? 'utf8mb4_unicode_ci' : ($charset . '_general_ci');
-        $pdo->exec("CREATE DATABASE `{$db}` CHARACTER SET {$charset} COLLATE {$collation}");
+        $pdo->exec("CREATE DATABASE IF NOT EXISTS `{$db}` CHARACTER SET {$charset} COLLATE {$collation}");
 
         $p = $pdo->quote($password);
         foreach (['localhost', '127.0.0.1'] as $host) {

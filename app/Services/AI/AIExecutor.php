@@ -142,12 +142,31 @@ class AIExecutor
                 return ['ok' => true, 'output' => "Database {$args['name']} dropped."];
 
             case 'sql':
-                $res = (new MysqlService())->runQuery($args['database'] ?? '', $args['query'] ?? '');
+                $db = $args['database'] ?? '';
+                $query = $args['query'] ?? '';
+                $mysql = new MysqlService();
+                $autoCreated = '';
+                try {
+                    $res = $mysql->runQuery($db, $query);
+                } catch (\Throwable $e) {
+                    // Self-heal: if the database doesn't exist yet, create it
+                    // (with a paired user) and retry — so "make db + tables" works
+                    // in one step even if the model skips create_database.
+                    if ($db && str_contains($e->getMessage(), 'Unknown database')) {
+                        $pw = \Illuminate\Support\Str::random(16);
+                        $mysql->createDatabaseWithUser($db, $db, $pw);
+                        \App\Models\DbCredential::updateOrCreate(['db_name' => $db], ['username' => $db, 'password' => $pw]);
+                        $autoCreated = "Database {$db} did not exist — created it (user '{$db}', password {$pw}). ";
+                        $res = $mysql->runQuery($db, $query);
+                    } else {
+                        throw $e;
+                    }
+                }
                 $out = $res['affected'] !== null
                     ? ($res['affected'] . ' rows affected.')
                     : (count($res['rows']) . ' rows returned: ' . json_encode(array_slice($res['rows'], 0, 30)));
 
-                return ['ok' => true, 'output' => $out];
+                return ['ok' => true, 'output' => $autoCreated . $out];
 
             case 'create_db_user':
                 (new MysqlService())->createUser($args['username'], $args['password'] ?? '', $args['host'] ?? 'localhost');
