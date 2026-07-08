@@ -30,12 +30,13 @@ class DatabaseController extends Controller
         }, $databases);
 
         return view('databases.index', [
-            'databases' => $databases,
-            'users'     => $available ? $this->mysql->users() : [],
-            'totalSize' => $available ? $this->mysql->totalSizeHuman() : '—',
-            'available' => $available,
-            'connError' => $available ? null : $this->mysql->error(),
-            'isMock'    => false,
+            'databases'  => $databases,
+            'users'      => $available ? $this->mysql->users() : [],
+            'totalSize'  => $available ? $this->mysql->totalSizeHuman() : '—',
+            'available'  => $available,
+            'connError'  => $available ? null : $this->mysql->error(),
+            'phpmyadmin' => is_dir('/usr/share/phpmyadmin'),
+            'isMock'     => false,
         ]);
     }
 
@@ -157,8 +158,9 @@ class DatabaseController extends Controller
         }
 
         return view('databases.browse', [
-            'db'     => $name,
-            'tables' => $this->mysql->tables($name),
+            'db'         => $name,
+            'tables'     => $this->mysql->tables($name),
+            'phpmyadmin' => is_dir('/usr/share/phpmyadmin'),
         ]);
     }
 

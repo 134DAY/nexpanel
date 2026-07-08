@@ -170,6 +170,33 @@ ReadWritePaths=/etc/nginx /etc/letsencrypt
 FPMOV
 systemctl daemon-reload
 
+# ---- 6c. phpMyAdmin ------------------------------------------------------
+log "Installing phpMyAdmin"
+PMA_VER="5.2.2"
+if [ ! -d /usr/share/phpmyadmin ]; then
+    if curl -fsSL -o /tmp/pma.tar.gz "https://files.phpmyadmin.net/phpMyAdmin/${PMA_VER}/phpMyAdmin-${PMA_VER}-all-languages.tar.gz"; then
+        tar xzf /tmp/pma.tar.gz -C /tmp
+        mv "/tmp/phpMyAdmin-${PMA_VER}-all-languages" /usr/share/phpmyadmin
+        rm -f /tmp/pma.tar.gz
+    else
+        warn "phpMyAdmin download failed — skipping."
+    fi
+fi
+if [ -d /usr/share/phpmyadmin ] && [ ! -f /usr/share/phpmyadmin/config.inc.php ]; then
+    mkdir -p /usr/share/phpmyadmin/tmp
+    PMA_SECRET="$(openssl rand -hex 16)"
+    cat > /usr/share/phpmyadmin/config.inc.php <<PMA
+<?php
+\$cfg['blowfish_secret'] = '${PMA_SECRET}';
+\$i = 0; \$i++;
+\$cfg['Servers'][\$i]['auth_type'] = 'cookie';
+\$cfg['Servers'][\$i]['host'] = '127.0.0.1';
+\$cfg['Servers'][\$i]['AllowNoPassword'] = false;
+\$cfg['TempDir'] = '/usr/share/phpmyadmin/tmp';
+PMA
+    chown -R "$APP_USER":"$APP_USER" /usr/share/phpmyadmin
+fi
+
 # ---- 7. nginx vhost for the panel --------------------------------------
 log "Configuring Nginx site for the panel"
 cat > /etc/nginx/sites-available/nexpanel <<NGINX
@@ -193,6 +220,20 @@ server {
     location ~ \.php\$ {
         include snippets/fastcgi-php.conf;
         fastcgi_pass unix:/run/php/php${PHP_VERSION}-fpm.sock;
+    }
+
+    location ^~ /phpmyadmin {
+        root /usr/share/;
+        index index.php;
+        location ~ ^/phpmyadmin/(.+\.php)\$ {
+            root /usr/share/;
+            fastcgi_pass unix:/run/php/php${PHP_VERSION}-fpm.sock;
+            include snippets/fastcgi-php.conf;
+            fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        }
+        location ~* ^/phpmyadmin/(.+\.(?:css|js|png|jpg|jpeg|gif|ico|woff2?|svg|map))\$ {
+            root /usr/share/;
+        }
     }
 
     location ~ /\.(?!well-known).* { deny all; }

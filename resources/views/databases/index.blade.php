@@ -39,10 +39,18 @@
             <button @click="tab='databases'" :class="tab==='databases' ? 'bg-white dark:bg-surface-800 shadow text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-400'" class="px-4 py-2 rounded-lg text-sm font-medium transition-all">Databases</button>
             <button @click="tab='users'" :class="tab==='users' ? 'bg-white dark:bg-surface-800 shadow text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-400'" class="px-4 py-2 rounded-lg text-sm font-medium transition-all">Users</button>
         </div>
-        <button @click="showCreate=true" @disabled(!$available) class="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold rounded-xl shadow-lg shadow-cyan-500/25 transition-all text-sm disabled:opacity-40 disabled:cursor-not-allowed">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
-            <span x-text="tab==='databases' ? 'Create Database' : 'Add User'"></span>
-        </button>
+        <div class="flex items-center gap-2">
+            @if($phpmyadmin)
+            <a href="/phpmyadmin/" target="_blank" class="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/10 font-semibold rounded-xl transition-all text-sm">
+                <svg class="w-4 h-4 text-orange-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15H9v-6h2v6zm4 0h-2v-6h2v6z"/></svg>
+                phpMyAdmin
+            </a>
+            @endif
+            <button @click="showCreate=true" @disabled(!$available) class="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold rounded-xl shadow-lg shadow-cyan-500/25 transition-all text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+                <span x-text="tab==='databases' ? 'Create Database' : 'Add User'"></span>
+            </button>
+        </div>
     </div>
 
     {{-- Databases table (aaPanel-style) --}}
@@ -81,7 +89,10 @@
                     <td class="px-3 py-3 text-sm text-slate-600 dark:text-slate-400">{{ $db['tables'] }}</td>
                     <td class="px-5 py-3">
                         <div class="flex items-center justify-end gap-1 text-slate-400">
-                            <a href="/databases/{{ urlencode($db['name']) }}/browse" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 hover:text-cyan-500" title="Manage (phpMyAdmin)"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z"/></svg></a>
+                            <a href="/databases/{{ urlencode($db['name']) }}/browse" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 hover:text-cyan-500" title="Browse (built-in)"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z"/></svg></a>
+                            @if($phpmyadmin)
+                            <a href="/phpmyadmin/index.php?db={{ urlencode($db['name']) }}" target="_blank" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 hover:text-orange-500" title="Open in phpMyAdmin"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15H9v-6h2v6zm4 0h-2v-6h2v6z"/></svg></a>
+                            @endif
                             <button @click="openImport('{{ $db['name'] }}')" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 hover:text-blue-500" title="Import .sql"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg></button>
                             <a href="/databases/{{ urlencode($db['name']) }}/backup" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 hover:text-emerald-500" title="Backup"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg></a>
                             <button @click="openPerm('{{ $db['name'] }}')" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 hover:text-violet-500" title="Permission"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/></svg></button>

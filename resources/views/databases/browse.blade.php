@@ -12,6 +12,12 @@
         </a>
         <h2 class="text-lg font-bold text-slate-800 dark:text-white font-mono">{{ $db }}</h2>
         <span class="text-xs text-slate-400">{{ count($tables) }} tables</span>
+        @if($phpmyadmin)
+        <a href="/phpmyadmin/index.php?db={{ urlencode($db) }}" target="_blank" class="ml-auto flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/10 text-xs font-semibold">
+            <svg class="w-4 h-4 text-orange-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15H9v-6h2v6zm4 0h-2v-6h2v6z"/></svg>
+            Open in phpMyAdmin
+        </a>
+        @endif
     </div>
 
     <div class="grid grid-cols-[240px_1fr] gap-4 items-start">
