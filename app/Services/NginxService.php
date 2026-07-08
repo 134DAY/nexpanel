@@ -69,7 +69,7 @@ class NginxService
         if (@file_put_contents($confPath, $config) === false) {
             throw new \RuntimeException('Cannot write config (need root permission on /etc/nginx).');
         }
-        @mkdir($docRoot, 0755, true);
+        $this->seedDocRoot($docRoot, $domain);
 
         // Enable via symlink.
         $link = $this->enabled . '/' . $name;
@@ -165,6 +165,39 @@ class NginxService
         return $result->successful()
             ? 'SSL certificate issued.'
             : 'SSL request failed: ' . trim($result->errorOutput() ?: $result->output());
+    }
+
+    /**
+     * Create the document root and drop a starter index.html so a brand-new
+     * site shows something instead of a blank 403. Uses the privileged runner
+     * because /var/www is root-owned and the web user can't write there.
+     */
+    private function seedDocRoot(string $docRoot, string $domain): void
+    {
+        $index = $docRoot . '/index.html';
+        $page = str_replace('{DOMAIN}', htmlspecialchars($domain), <<<'HTML'
+        <!doctype html><html lang="en"><head><meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>{DOMAIN}</title>
+        <style>body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;display:grid;place-items:center;min-height:100vh;margin:0}
+        .b{background:linear-gradient(135deg,#06b6d4,#3b82f6);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:3rem;font-weight:800}
+        p{color:#94a3b8}small{color:#475569}</style></head>
+        <body><div style="text-align:center"><div class="b">It works! 🎉</div>
+        <p>{DOMAIN} is served by NexPanel + Nginx.</p>
+        <small>Replace this file via the File Manager to build your site.</small></div></body></html>
+        HTML);
+
+        $cmd = 'mkdir -p ' . escapeshellarg($docRoot)
+            . ' && { [ -e ' . escapeshellarg($index) . ' ] || printf %s ' . escapeshellarg($page) . ' > ' . escapeshellarg($index) . '; }'
+            . ' && chown -R www-data:www-data ' . escapeshellarg(dirname($docRoot));
+
+        $runner = '/usr/local/bin/nexpanel-run';
+        if (is_file($runner)) {
+            Process::timeout(20)->input($cmd)->run([...$this->sudo(), $runner]);
+        } else {
+            @mkdir($docRoot, 0755, true);
+            @file_put_contents($index, $page);
+        }
     }
 
     private function buildConfig(string $domain, string $docRoot, string $phpVersion): string

@@ -108,9 +108,8 @@ class AIExecutor
                 $domain  = $args['domain'];
                 $docRoot = $args['document_root'] ?? "/var/www/{$domain}/public";
                 $msg = $nginx->createSite($domain, $docRoot, $args['php'] ?? '8.3', (bool) ($args['ssl'] ?? false));
-                self::shellRoot("mkdir -p " . escapeshellarg($docRoot) . " && chown -R www-data:www-data " . escapeshellarg(dirname($docRoot)));
 
-                return ['ok' => true, 'output' => $msg];
+                return ['ok' => true, 'output' => $msg . " Starter page created at {$docRoot}."];
 
             case 'delete_website':
                 (new NginxService())->deleteSite($args['domain']);
