@@ -32,6 +32,7 @@ class AIExecutor
         'create_db_user'  => 'caution',
         'service'         => 'caution',
         'create_cron'     => 'caution',
+        'read_file'       => 'safe',
         'write_file'      => 'caution',
         'shell'           => 'caution',
     ];
@@ -70,6 +71,7 @@ class AIExecutor
             'create_db_user'  => "Create MySQL user {$args['username']}",
             'service'         => ucfirst($args['action'] ?? '?') . " service {$args['name']}",
             'create_cron'     => "Add cron job: {$args['command']} ({$args['schedule']})",
+            'read_file'       => "Read file {$args['path']}",
             'write_file'      => "Write file {$args['path']} (" . strlen($args['content'] ?? '') . " bytes)",
             'shell'           => "Run: {$args['command']}",
             default           => $tool,
@@ -156,6 +158,23 @@ class AIExecutor
                 Process::input(rtrim($cur, "\n") . "\n" . $line . "\n")->run(['crontab', '-']);
 
                 return ['ok' => true, 'output' => "Cron job added: {$line}"];
+
+            case 'read_file':
+                $rpath = $args['path'] ?? '';
+                if ($rpath === '' || ! is_file($rpath)) {
+                    return ['ok' => false, 'output' => "File not found: {$rpath}"];
+                }
+                if (@filesize($rpath) > 200000) {
+                    return ['ok' => false, 'output' => 'File too large to read (max 200 KB).'];
+                }
+                $rc = @file_get_contents($rpath);
+                if ($rc === false) {
+                    $rr = self::shellRoot('cat ' . escapeshellarg($rpath));
+
+                    return $rr['ok'] ? ['ok' => true, 'output' => $rr['output']] : ['ok' => false, 'output' => "Cannot read {$rpath}"];
+                }
+
+                return ['ok' => true, 'output' => $rc];
 
             case 'write_file':
                 $path = $args['path'] ?? '';
