@@ -183,21 +183,50 @@ if [ ! -d /usr/share/phpmyadmin ]; then
     fi
 fi
 if [ -d /usr/share/phpmyadmin ] && [ ! -f /usr/share/phpmyadmin/config.inc.php ]; then
-    # TempDir must live outside /usr — php-fpm's ProtectSystem makes /usr
-    # read-only for the web process, so a tmp under /usr can't be written.
-    mkdir -p /var/lib/phpmyadmin/tmp
+    # TempDir + signon tokens must live outside /usr — php-fpm's ProtectSystem
+    # makes /usr read-only for the web process.
+    mkdir -p /var/lib/phpmyadmin/tmp /var/lib/phpmyadmin/signon
     chown -R "$APP_USER":"$APP_USER" /var/lib/phpmyadmin
+    chmod 700 /var/lib/phpmyadmin/signon
     PMA_SECRET="$(openssl rand -hex 16)"
+    # signon auth so NexPanel can auto-login users into phpMyAdmin (aaPanel-style).
     cat > /usr/share/phpmyadmin/config.inc.php <<PMA
 <?php
 \$cfg['blowfish_secret'] = '${PMA_SECRET}';
 \$i = 0; \$i++;
-\$cfg['Servers'][\$i]['auth_type'] = 'cookie';
+\$cfg['Servers'][\$i]['auth_type'] = 'signon';
+\$cfg['Servers'][\$i]['SignonSession'] = 'PMASignon';
+\$cfg['Servers'][\$i]['SignonURL'] = '/databases';
 \$cfg['Servers'][\$i]['host'] = '127.0.0.1';
 \$cfg['Servers'][\$i]['AllowNoPassword'] = false;
 \$cfg['TempDir'] = '/var/lib/phpmyadmin/tmp';
 PMA
     chown -R "$APP_USER":"$APP_USER" /usr/share/phpmyadmin
+
+    # Native signon endpoint: consumes a one-time token written by NexPanel.
+    mkdir -p /usr/share/pma-signon
+    cat > /usr/share/pma-signon/signon.php <<'SIGNON'
+<?php
+$token = preg_replace('/[^a-f0-9]/', '', $_GET['token'] ?? '');
+$db    = preg_replace('/[^A-Za-z0-9_]/', '', $_GET['db'] ?? '');
+$file  = '/var/lib/phpmyadmin/signon/' . $token . '.json';
+if ($token && is_file($file)) {
+    $data = json_decode(file_get_contents($file), true);
+    @unlink($file);
+    if ($data && (time() - ($data['t'] ?? 0)) < 60) {
+        session_name('PMASignon');
+        session_start();
+        $_SESSION['PMA_single_signon_user']     = $data['user'];
+        $_SESSION['PMA_single_signon_password'] = $data['pass'];
+        $_SESSION['PMA_single_signon_host']     = '127.0.0.1';
+        session_write_close();
+        header('Location: /phpmyadmin/index.php' . ($db ? ('?db=' . rawurlencode($db)) : ''));
+        exit;
+    }
+}
+header('Location: /databases');
+SIGNON
+    chown -R "$APP_USER":"$APP_USER" /usr/share/pma-signon
 fi
 
 # Remove MySQL anonymous users (security + avoids a confusing anon login).
@@ -226,6 +255,16 @@ server {
     location ~ \.php\$ {
         include snippets/fastcgi-php.conf;
         fastcgi_pass unix:/run/php/php${PHP_VERSION}-fpm.sock;
+    }
+
+    location ^~ /pma-signon {
+        root /usr/share/;
+        location ~ ^/pma-signon/(.+\.php)\$ {
+            root /usr/share/;
+            fastcgi_pass unix:/run/php/php${PHP_VERSION}-fpm.sock;
+            include snippets/fastcgi-php.conf;
+            fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        }
     }
 
     location ^~ /phpmyadmin {
