@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Process;
 use PDO;
 
 /**
@@ -148,6 +149,130 @@ class MysqlService
         $this->pdoOrFail()->exec("DROP DATABASE `{$name}`");
     }
 
+    /** Create a database plus a dedicated user granted full access to it. */
+    public function createDatabaseWithUser(string $db, string $user, string $password, string $charset = 'utf8mb4'): void
+    {
+        $this->assertIdentifier($db);
+        $this->assertIdentifier($user);
+        $pdo = $this->pdoOrFail();
+        $charset = preg_match('/^[a-z0-9_]+$/i', $charset) ? $charset : 'utf8mb4';
+        $collation = $charset === 'utf8mb4' ? 'utf8mb4_unicode_ci' : ($charset . '_general_ci');
+        $pdo->exec("CREATE DATABASE `{$db}` CHARACTER SET {$charset} COLLATE {$collation}");
+
+        $p = $pdo->quote($password);
+        foreach (['localhost', '127.0.0.1'] as $host) {
+            $u = $pdo->quote($user);
+            $h = $pdo->quote($host);
+            $pdo->exec("CREATE USER IF NOT EXISTS {$u}@{$h} IDENTIFIED BY {$p}");
+            $pdo->exec("GRANT ALL PRIVILEGES ON `{$db}`.* TO {$u}@{$h}");
+        }
+        $pdo->exec('FLUSH PRIVILEGES');
+    }
+
+    public function changeUserPassword(string $user, string $password): void
+    {
+        $this->assertIdentifier($user);
+        $pdo = $this->pdoOrFail();
+        $p = $pdo->quote($password);
+        foreach (['localhost', '127.0.0.1'] as $host) {
+            try {
+                $pdo->exec('ALTER USER ' . $pdo->quote($user) . '@' . $pdo->quote($host) . " IDENTIFIED BY {$p}");
+            } catch (\Throwable $e) {
+                // user may not exist on that host — ignore
+            }
+        }
+        $pdo->exec('FLUSH PRIVILEGES');
+    }
+
+    public function userGrants(string $user, string $host = 'localhost'): array
+    {
+        $this->assertIdentifier($user);
+        try {
+            return $this->pdoOrFail()
+                ->query('SHOW GRANTS FOR ' . $this->pdoOrFail()->quote($user) . '@' . $this->pdoOrFail()->quote($host))
+                ->fetchAll(PDO::FETCH_COLUMN);
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    public function grantUserOnDb(string $user, string $db, string $host = 'localhost'): void
+    {
+        $this->assertIdentifier($user);
+        $this->assertIdentifier($db);
+        $pdo = $this->pdoOrFail();
+        $pdo->exec("GRANT ALL PRIVILEGES ON `{$db}`.* TO " . $pdo->quote($user) . '@' . $pdo->quote($host));
+        $pdo->exec('FLUSH PRIVILEGES');
+    }
+
+    public function revokeUserOnDb(string $user, string $db, string $host = 'localhost'): void
+    {
+        $this->assertIdentifier($user);
+        $this->assertIdentifier($db);
+        $pdo = $this->pdoOrFail();
+        $pdo->exec("REVOKE ALL PRIVILEGES ON `{$db}`.* FROM " . $pdo->quote($user) . '@' . $pdo->quote($host));
+        $pdo->exec('FLUSH PRIVILEGES');
+    }
+
+    /** Import a .sql dump into a database via the mysql client. */
+    public function importSql(string $db, string $file): void
+    {
+        $this->assertIdentifier($db);
+        $host = config('nexpanel.db_admin.host', '127.0.0.1');
+        $user = config('nexpanel.db_admin.user', 'root');
+        $pass = config('nexpanel.db_admin.password', '');
+        $args = ['mysql', '-h', $host, '-u', $user];
+        if ($pass !== '') {
+            $args[] = '-p' . $pass;
+        }
+        $args[] = $db;
+
+        $result = Process::timeout(300)->input((string) file_get_contents($file))->run($args);
+        if (! $result->successful()) {
+            throw new \RuntimeException(trim($result->errorOutput() ?: $result->output()) ?: 'Import failed.');
+        }
+    }
+
+    public function primaryKey(string $db, string $table): ?string
+    {
+        foreach ($this->tableStructure($db, $table) as $col) {
+            if (($col['Key'] ?? '') === 'PRI') {
+                return $col['Field'];
+            }
+        }
+
+        return null;
+    }
+
+    public function updateRow(string $db, string $table, string $pk, $pkValue, array $data): void
+    {
+        $this->assertIdentifier($db);
+        $this->assertIdentifier($table);
+        $this->assertIdentifier($pk);
+        $set = [];
+        $vals = [];
+        foreach ($data as $col => $val) {
+            if (! preg_match('/^[A-Za-z0-9_]+$/', (string) $col) || $col === $pk) {
+                continue;
+            }
+            $set[] = "`{$col}` = ?";
+            $vals[] = $val;
+        }
+        if (! $set) {
+            return;
+        }
+        $vals[] = $pkValue;
+        $this->pdoOrFail()->prepare("UPDATE `{$db}`.`{$table}` SET " . implode(', ', $set) . " WHERE `{$pk}` = ? LIMIT 1")->execute($vals);
+    }
+
+    public function deleteRow(string $db, string $table, string $pk, $pkValue): void
+    {
+        $this->assertIdentifier($db);
+        $this->assertIdentifier($table);
+        $this->assertIdentifier($pk);
+        $this->pdoOrFail()->prepare("DELETE FROM `{$db}`.`{$table}` WHERE `{$pk}` = ? LIMIT 1")->execute([$pkValue]);
+    }
+
     /** Tables in a database with row count + size. */
     public function tables(string $db): array
     {
@@ -184,7 +309,7 @@ class MysqlService
 
         $rows = $pdo->query("SELECT * FROM `{$db}`.`{$table}` LIMIT {$limit}")->fetchAll(PDO::FETCH_ASSOC);
 
-        return ['columns' => $columns, 'rows' => $rows];
+        return ['columns' => $columns, 'rows' => $rows, 'pk' => $this->primaryKey($db, $table)];
     }
 
     /** Column definitions of a table (Field, Type, Null, Key, Default, Extra). */

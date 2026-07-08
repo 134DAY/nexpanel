@@ -36,6 +36,12 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/databases', [DatabaseController::class, 'index'])->name('databases.index');
     Route::post('/databases', [DatabaseController::class, 'store'])->name('databases.store');
     Route::post('/databases/users/drop', [DatabaseController::class, 'dropUser'])->name('databases.users.drop');
+    Route::put('/databases/{name}/password', [DatabaseController::class, 'changePassword'])->name('databases.password');
+    Route::post('/databases/{name}/import', [DatabaseController::class, 'import'])->name('databases.import');
+    Route::get('/databases/{name}/permission', [DatabaseController::class, 'permission'])->name('databases.permission');
+    Route::post('/databases/{name}/grant', [DatabaseController::class, 'grant'])->name('databases.grant');
+    Route::post('/databases/{name}/table/{table}/update', [DatabaseController::class, 'updateRow'])->name('databases.table.update');
+    Route::post('/databases/{name}/table/{table}/deleterow', [DatabaseController::class, 'deleteRow'])->name('databases.table.deleterow');
     Route::get('/databases/{name}/browse', [DatabaseController::class, 'browse'])->name('databases.browse');
     Route::get('/databases/{name}/table/{table}', [DatabaseController::class, 'tableData'])->name('databases.table');
     Route::get('/databases/{name}/table/{table}/structure', [DatabaseController::class, 'tableStructure'])->name('databases.table.structure');

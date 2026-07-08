@@ -60,13 +60,20 @@
                     <div x-show="tab === 'browse' && !error" class="overflow-auto max-h-[60vh]">
                         <table class="w-full text-sm">
                             <thead class="sticky top-0"><tr class="bg-slate-50 dark:bg-white/5">
+                                <th x-show="pk" class="px-3 py-2 border-b border-slate-200 dark:border-slate-800/60 w-16"></th>
                                 <template x-for="c in columns" :key="c"><th class="text-left px-3 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap border-b border-slate-200 dark:border-slate-800/60" x-text="c"></th></template>
                             </tr></thead>
                             <tbody>
-                                <template x-for="(row,i) in rows" :key="i"><tr class="hover:bg-slate-50 dark:hover:bg-white/[0.02] border-b border-slate-100 dark:border-slate-800/40">
+                                <template x-for="(row,i) in rows" :key="i"><tr class="hover:bg-slate-50 dark:hover:bg-white/[0.02] border-b border-slate-100 dark:border-slate-800/40 group">
+                                    <td x-show="pk" class="px-3 py-1.5 whitespace-nowrap">
+                                        <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button @click="startEdit(row)" class="p-1 rounded text-slate-400 hover:text-blue-500" title="Edit"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg></button>
+                                            <button @click="delRow(row)" class="p-1 rounded text-slate-400 hover:text-red-500" title="Delete"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79"/></svg></button>
+                                        </div>
+                                    </td>
                                     <template x-for="c in columns" :key="c"><td class="px-3 py-1.5 font-mono text-xs whitespace-nowrap max-w-xs truncate" :class="row[c] === null ? 'text-slate-400 italic' : 'text-slate-700 dark:text-slate-300'" x-text="row[c] === null ? 'NULL' : row[c]"></td></template>
                                 </tr></template>
-                                <template x-if="!rows.length"><tr><td class="px-4 py-6 text-center text-sm text-slate-400" :colspan="columns.length || 1">Table is empty.</td></tr></template>
+                                <template x-if="!rows.length"><tr><td class="px-4 py-6 text-center text-sm text-slate-400" :colspan="(columns.length || 1) + (pk?1:0)">Table is empty.</td></tr></template>
                             </tbody>
                         </table>
                     </div>
@@ -138,6 +145,28 @@
             </div>
         </div>
     </div>
+
+    {{-- Edit row modal --}}
+    <div x-show="edit.open" x-cloak x-transition.opacity class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @click.self="edit.open=false">
+        <div class="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-lg max-h-[85vh] flex flex-col">
+            <div class="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+                <h3 class="text-sm font-bold text-slate-800 dark:text-white">Edit row <span class="font-mono text-cyan-500" x-text="pk + '=' + edit.pkValue"></span></h3>
+                <button @click="edit.open=false" class="text-slate-400"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+            </div>
+            <div class="p-4 space-y-2 overflow-auto">
+                <template x-for="c in columns" :key="c">
+                    <div class="grid grid-cols-[140px_1fr] items-center gap-2">
+                        <label class="text-xs font-mono text-slate-600 dark:text-slate-300 text-right truncate" x-text="c" :class="c === pk && 'text-amber-500'"></label>
+                        <input x-model="edit.data[c]" :disabled="c === pk" class="px-3 py-2 rounded-lg bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50">
+                    </div>
+                </template>
+            </div>
+            <div class="flex justify-end gap-2 p-4 border-t border-slate-200 dark:border-slate-700">
+                <button @click="edit.open=false" class="px-4 py-2 bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 rounded-xl text-sm">Cancel</button>
+                <button @click="saveEdit()" :disabled="loading" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold rounded-xl text-sm disabled:opacity-40">Save</button>
+            </div>
+        </div>
+    </div>
 </div>
 @endsection
 
@@ -149,7 +178,8 @@ function dbBrowser(db) {
     const get = (url) => fetch(url, { headers: { 'Accept': 'application/json' } }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Error'); return d; });
     return {
         db, table: '', tab: 'browse', loading: false, error: null, info: '',
-        columns: [], rows: [], structure: [], form: {},
+        columns: [], rows: [], structure: [], form: {}, pk: '',
+        edit: { open: false, pkValue: null, data: {} },
         sql: '', sqlCols: [], sqlRows: [], sqlInfo: '', sqlError: false,
 
         u(path) { return `/databases/${encodeURIComponent(this.db)}/table/${encodeURIComponent(this.table)}${path}`; },
@@ -157,8 +187,19 @@ function dbBrowser(db) {
         async openTable(name) { this.table = name; this.tab = 'browse'; this.error = null; await this.loadBrowse(); },
         async loadBrowse() {
             this.loading = true; this.error = null;
-            try { const d = await get(this.u('')); this.columns = d.columns; this.rows = d.rows; this.info = d.rows.length + ' rows shown (max 100)'; }
+            try { const d = await get(this.u('')); this.columns = d.columns; this.rows = d.rows; this.pk = d.pk || ''; this.info = d.rows.length + ' rows shown (max 100)' + (this.pk ? '' : ' · no primary key (read-only)'); }
             catch (e) { this.error = e.message; } this.loading = false;
+        },
+        startEdit(row) { this.edit = { open: true, pkValue: row[this.pk], data: { ...row } }; },
+        async saveEdit() {
+            this.loading = true;
+            try { await post(this.u('/update'), { pk: this.pk, pk_value: this.edit.pkValue, row: this.edit.data }); this.edit.open = false; await this.loadBrowse(); }
+            catch (e) { alert(e.message); } this.loading = false;
+        },
+        async delRow(row) {
+            if (!confirm('Delete this row?')) return;
+            try { await post(this.u('/deleterow'), { pk: this.pk, pk_value: row[this.pk] }); await this.loadBrowse(); }
+            catch (e) { alert(e.message); }
         },
         async switchTab(t) {
             this.tab = t; this.error = null;
