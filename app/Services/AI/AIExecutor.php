@@ -128,9 +128,13 @@ class AIExecutor
                 return ['ok' => true, 'output' => "{$args['domain']} is now " . ($en ? 'enabled' : 'disabled') . '.'];
 
             case 'create_database':
-                (new MysqlService())->createDatabase($args['name'], $args['charset'] ?? 'utf8mb4');
+                $dbName = $args['name'];
+                $dbUser = $args['username'] ?? $dbName;
+                $dbPass = $args['password'] ?? \Illuminate\Support\Str::random(16);
+                (new MysqlService())->createDatabaseWithUser($dbName, $dbUser, $dbPass, $args['charset'] ?? 'utf8mb4');
+                \App\Models\DbCredential::updateOrCreate(['db_name' => $dbName], ['username' => $dbUser, 'password' => $dbPass]);
 
-                return ['ok' => true, 'output' => "Database {$args['name']} created."];
+                return ['ok' => true, 'output' => "Database {$dbName} created with user '{$dbUser}' (password: {$dbPass})."];
 
             case 'drop_database':
                 (new MysqlService())->dropDatabase($args['name']);
