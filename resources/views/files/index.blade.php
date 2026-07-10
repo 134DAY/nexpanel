@@ -266,18 +266,67 @@
         </div>
     </div>
 
-    {{-- Editor Modal --}}
-    <div x-show="editor.open" x-cloak x-transition.opacity class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @keydown.escape.window="editor.open = false">
-        <div class="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-4xl flex flex-col" style="max-height: 85vh">
-            <div class="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
-                <h3 class="text-sm font-bold text-slate-800 dark:text-white font-mono truncate" x-text="editor.path"></h3>
-                <button @click="editor.open = false" class="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    {{-- Editor Modal (aaPanel-style Online Text Editor) --}}
+    <div x-show="editor.open" x-cloak class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @keydown.escape.window="editor.open && closeEditor()">
+        <div class="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-6xl flex flex-col overflow-hidden" style="height: 88vh">
+            {{-- Title + action bar --}}
+            <div class="flex items-center gap-1 px-3 py-2 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-white/5">
+                <span class="text-sm font-bold text-slate-700 dark:text-slate-200 mr-2">Online Text Editor</span>
+                <button @click="saveActive()" class="ed-btn" title="Save (Ctrl+S)">
+                    <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg> Save
+                </button>
+                <button @click="cmSearch()" class="ed-btn" title="Search (Ctrl+F)">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg> Search
+                </button>
+                <button @click="cmReplace()" class="ed-btn" title="Replace (Ctrl+Shift+F)">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-9L21 3m0 0l-4.5 4.5M21 3H7.5"/></svg> Replace
+                </button>
+                <button @click="cmJump()" class="ed-btn" title="Jump to line">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg> Jump Line
+                </button>
+                <div class="flex items-center gap-0.5 ml-1">
+                    <button @click="fontDelta(-1)" class="ed-btn !px-2" title="Smaller font">A-</button>
+                    <button @click="fontDelta(1)" class="ed-btn !px-2" title="Bigger font">A+</button>
+                </div>
+                <button @click="cmToggleTheme()" class="ed-btn" title="Toggle editor theme">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/></svg> Theme
+                </button>
+                <button @click="closeEditor()" class="ml-auto p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-white/10 text-slate-400"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
             </div>
-            <textarea x-model="editor.content" spellcheck="false" class="flex-1 w-full p-4 font-mono text-sm bg-slate-50 dark:bg-surface-900 text-slate-800 dark:text-slate-200 focus:outline-none resize-none" style="min-height: 50vh"></textarea>
-            <div class="flex items-center justify-end gap-3 p-4 border-t border-slate-200 dark:border-slate-700">
-                <span class="text-xs text-slate-400 mr-auto" x-text="editor.status"></span>
-                <button @click="editor.open = false" class="px-4 py-2 bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 font-medium rounded-xl text-sm">Cancel</button>
-                <button @click="saveFile()" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold rounded-xl text-sm">Save</button>
+
+            {{-- File tabs --}}
+            <div class="flex items-end gap-px px-2 pt-1.5 bg-slate-100 dark:bg-surface-900 overflow-x-auto">
+                <template x-for="t in editor.tabs" :key="t.id">
+                    <div @click="switchEditorTab(t.id)"
+                         :class="t.id === editor.activeId ? 'bg-white dark:bg-surface-800 text-slate-800 dark:text-white' : 'bg-slate-200/60 dark:bg-white/5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'"
+                         class="group flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-t-lg cursor-pointer text-xs font-medium whitespace-nowrap">
+                        <span x-html="iconHtml({name: t.name, type: 'file'})"></span>
+                        <span x-text="t.name"></span>
+                        <span x-show="t.dirty" class="w-1.5 h-1.5 rounded-full bg-amber-400" title="Unsaved changes"></span>
+                        <button @click.stop="closeEditorTab(t.id)" class="p-0.5 rounded hover:bg-slate-300 dark:hover:bg-white/10 text-slate-400 opacity-0 group-hover:opacity-100">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                </template>
+            </div>
+
+            {{-- CodeMirror host --}}
+            <div class="flex-1 min-h-0 relative bg-white dark:bg-surface-800">
+                <div x-ref="cm" class="absolute inset-0"></div>
+                <div x-show="editor.loading" x-cloak class="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-surface-800/60">
+                    <svg class="w-6 h-6 animate-spin text-cyan-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                </div>
+            </div>
+
+            {{-- Status bar --}}
+            <div class="flex items-center gap-4 px-4 py-1.5 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-white/5 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                <span class="truncate max-w-[40%]" x-text="editor.path"></span>
+                <span class="ml-auto" x-text="editor.eol"></span>
+                <span>Ln <span x-text="editor.ln"></span>, Col <span x-text="editor.col"></span></span>
+                <span x-text="'Tab: ' + editor.tab"></span>
+                <span x-text="editor.encoding"></span>
+                <span class="text-cyan-600 dark:text-cyan-400" x-text="editor.lang"></span>
+                <span x-show="editor.status" class="text-emerald-500" x-text="editor.status"></span>
             </div>
         </div>
     </div>
@@ -348,6 +397,10 @@
 @endsection
 
 @push('styles')
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/matchesonscrollbar.min.css">
 <style>
 .ctx { display:flex; align-items:center; gap:.5rem; width:100%; text-align:left; padding:.45rem 1rem; color:inherit; }
 .ctx:hover { background: rgba(6,182,212,.1); }
@@ -356,11 +409,41 @@
 .tb:hover { background:#e2e8f0; }
 .dark .tb { background:rgba(255,255,255,.05); color:#94a3b8; }
 .dark .tb:hover { background:rgba(255,255,255,.1); }
+.ed-btn { display:inline-flex; align-items:center; gap:.3rem; padding:.35rem .6rem; border-radius:.5rem; font-size:.8rem; font-weight:500;
+          color:#475569; transition:background-color .15s; }
+.ed-btn:hover { background:#e2e8f0; }
+.dark .ed-btn { color:#cbd5e1; }
+.dark .ed-btn:hover { background:rgba(255,255,255,.1); }
+.CodeMirror { height:100%; font-size:var(--ed-font,13px); font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+.CodeMirror-scroll { min-height:100%; }
 </style>
 @endpush
 
 @push('scripts')
+{{-- CodeMirror 5 from CDN (matches the app's existing CDN Tailwind/Alpine). --}}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/meta.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/mode/loadmode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/dialog/dialog.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/searchcursor.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/search.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/jump-to-line.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/selection/active-line.min.js"></script>
+{{-- Core modes preloaded so PHP (which embeds html/js/css/clike) highlights fully. --}}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/php/php.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/sql/sql.min.js"></script>
 <script>
+// Auto-load any other syntax modes on demand from the same CDN.
+if (window.CodeMirror) {
+    CodeMirror.modeURL = 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/%N/%N.min.js';
+}
 function fileManager(initialPath, root, trashCount) {
     const csrf = document.querySelector('meta[name="csrf-token"]').content;
 
@@ -394,7 +477,13 @@ function fileManager(initialPath, root, trashCount) {
         files: [], breadcrumbs: [], parent: null, disk: { used_h: '—', total_h: '—', free_h: '—', percent: 0 },
         error: null, loading: false, view: 'list',
 
-        editor: { open: false, path: '', content: '', status: '' },
+        editor: {
+            open: false, loading: false, path: '', status: '',
+            tabs: [], activeId: null, nextId: 1,
+            ln: 1, col: 1, tab: 4, eol: 'LF', encoding: 'utf-8', lang: '',
+            dark: (localStorage.getItem('theme') !== 'light'), font: 13,
+        },
+        _cm: null, // the single CodeMirror instance
         menu: { open: false, x: 0, y: 0, item: {} },
         clip: { path: '', name: '', mode: '' },
         cm: { open: false, path: '', name: '', mode: '755', bits: [[false,false,false],[false,false,false],[false,false,false]],
@@ -526,21 +615,126 @@ function fileManager(initialPath, root, trashCount) {
             catch (e) { alert(e.message); }
             event.target.value = '';
         },
+        // ---- CodeMirror editor ----
+        ensureCM() {
+            if (this._cm) return this._cm;
+            if (!window.CodeMirror) { alert('Editor failed to load (CodeMirror unavailable).'); return null; }
+            this._cm = CodeMirror(this.$refs.cm, {
+                lineNumbers: true, lineWrapping: false, indentUnit: 4, tabSize: 4,
+                matchBrackets: true, autoCloseBrackets: true, styleActiveLine: true,
+                theme: this.editor.dark ? 'material-darker' : 'default',
+                extraKeys: {
+                    'Ctrl-S': () => this.saveActive(),
+                    'Cmd-S': () => this.saveActive(),
+                },
+            });
+            this.$refs.cm.style.setProperty('--ed-font', this.editor.font + 'px');
+            this._cm.on('cursorActivity', () => {
+                const c = this._cm.getCursor();
+                this.editor.ln = c.line + 1;
+                this.editor.col = c.ch + 1;
+            });
+            this._cm.on('change', () => {
+                const t = this.editor.tabs.find(t => t.id === this.editor.activeId);
+                if (t && this._cm.getDoc() === t.doc) t.dirty = true;
+                this.editor.status = '';
+            });
+            return this._cm;
+        },
         async edit(path) {
+            const name = path.split(/[\\/]/).pop();
+            // Already open? Just focus its tab.
+            const existing = this.editor.tabs.find(t => t.path === path);
+            if (existing) { this.editor.open = true; this.$nextTick(() => this.switchEditorTab(existing.id)); return; }
+
+            this.editor.open = true;
+            this.editor.loading = true;
             try {
                 const res = await fetch('/files/read?path=' + encodeURIComponent(path), { headers: { 'Accept': 'application/json' } });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error);
-                this.editor = { open: true, path, content: data.content, status: '' };
-            } catch (e) { alert(e.message); }
+
+                await this.$nextTick();
+                const cm = this.ensureCM();
+                if (!cm) { this.editor.loading = false; return; }
+
+                const eol = data.content.includes('\r\n') ? 'CRLF' : 'LF';
+                const doc = CodeMirror.Doc(data.content.replace(/\r\n/g, '\n'), null);
+                const id = this.editor.nextId++;
+                this.editor.tabs.push({ id, path, name, doc, dirty: false, eol });
+                this.switchEditorTab(id);
+            } catch (e) { alert(e.message); if (!this.editor.tabs.length) this.editor.open = false; }
+            this.editor.loading = false;
         },
-        async saveFile() {
+        switchEditorTab(id) {
+            const t = this.editor.tabs.find(t => t.id === id);
+            if (!t) return;
+            const cm = this.ensureCM();
+            if (!cm) return;
+            this.editor.activeId = id;
+            cm.swapDoc(t.doc);
+            this.editor.path = t.path;
+            this.editor.eol = t.eol;
+            this.applyMode(t.name);
+            const c = cm.getCursor();
+            this.editor.ln = c.line + 1; this.editor.col = c.ch + 1;
+            this.editor.status = '';
+            this.$nextTick(() => { cm.refresh(); cm.focus(); });
+        },
+        applyMode(name) {
+            const cm = this._cm;
+            if (!cm || !CodeMirror.findModeByFileName) { this.editor.lang = 'Text'; return; }
+            const info = CodeMirror.findModeByFileName(name.toLowerCase());
+            if (info) {
+                cm.setOption('mode', info.mime || info.mode);
+                this.editor.lang = info.name;
+                if (info.mode && info.mode !== 'null' && CodeMirror.autoLoadMode) {
+                    CodeMirror.autoLoadMode(cm, info.mode);
+                }
+            } else {
+                cm.setOption('mode', null);
+                this.editor.lang = 'Text';
+            }
+        },
+        closeEditorTab(id) {
+            const i = this.editor.tabs.findIndex(t => t.id === id);
+            if (i < 0) return;
+            if (this.editor.tabs[i].dirty && !confirm('Discard unsaved changes to "' + this.editor.tabs[i].name + '"?')) return;
+            this.editor.tabs.splice(i, 1);
+            if (!this.editor.tabs.length) { this.closeEditor(); return; }
+            if (this.editor.activeId === id) this.switchEditorTab(this.editor.tabs[Math.max(0, i - 1)].id);
+        },
+        closeEditor() {
+            const dirty = this.editor.tabs.filter(t => t.dirty).length;
+            if (dirty && !confirm(dirty + ' file(s) have unsaved changes. Close anyway?')) return;
+            this.editor.open = false;
+            this.editor.tabs = [];
+            this.editor.activeId = null;
+        },
+        async saveActive() {
+            const t = this.editor.tabs.find(t => t.id === this.editor.activeId);
+            if (!t) return;
             this.editor.status = 'Saving…';
+            let content = t.doc.getValue();
+            if (t.eol === 'CRLF') content = content.replace(/\n/g, '\r\n');
             try {
-                await this.post('/files/save', this.form({ path: this.editor.path, content: this.editor.content }));
+                await this.post('/files/save', this.form({ path: t.path, content }));
+                t.dirty = false;
                 this.editor.status = 'Saved ✓';
-                setTimeout(() => this.editor.open = false, 600);
+                setTimeout(() => { if (this.editor.status === 'Saved ✓') this.editor.status = ''; }, 1500);
             } catch (e) { this.editor.status = ''; alert(e.message); }
+        },
+        cmSearch()  { if (this._cm) this._cm.execCommand('find'); },
+        cmReplace() { if (this._cm) this._cm.execCommand('replace'); },
+        cmJump()    { if (this._cm) this._cm.execCommand('jumpToLine'); },
+        fontDelta(d) {
+            this.editor.font = Math.max(9, Math.min(28, this.editor.font + d));
+            if (this.$refs.cm) this.$refs.cm.style.setProperty('--ed-font', this.editor.font + 'px');
+            if (this._cm) this._cm.refresh();
+        },
+        cmToggleTheme() {
+            this.editor.dark = !this.editor.dark;
+            if (this._cm) this._cm.setOption('theme', this.editor.dark ? 'material-darker' : 'default');
         },
 
         // ---- search ----
