@@ -10,6 +10,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PlaceholderController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ServiceController;
+use App\Http\Controllers\SecurityController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SSLController;
 use App\Http\Controllers\TerminalController;
@@ -89,6 +90,14 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/cron/{id}/toggle', [CronController::class, 'toggle'])->name('cron.toggle');
     Route::post('/cron/{id}/run', [CronController::class, 'run'])->name('cron.run');
     Route::delete('/cron/{id}', [CronController::class, 'destroy'])->name('cron.destroy');
+
+    // Security — Firewall
+    Route::get('/security', [SecurityController::class, 'index'])->name('security.index');
+    Route::get('/security/firewall', [SecurityController::class, 'state'])->name('security.firewall.state');
+    Route::post('/security/firewall/toggle', [SecurityController::class, 'toggle'])->name('security.firewall.toggle');
+    Route::post('/security/firewall/port', [SecurityController::class, 'addPort'])->name('security.firewall.port');
+    Route::post('/security/firewall/ip', [SecurityController::class, 'addIp'])->name('security.firewall.ip');
+    Route::delete('/security/firewall/{n}', [SecurityController::class, 'deleteRule'])->name('security.firewall.delete');
 
     // Logs
     Route::get('/logs', [LogController::class, 'index'])->name('logs.index');
