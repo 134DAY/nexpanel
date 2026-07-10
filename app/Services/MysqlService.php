@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Process;
 use PDO;
 
@@ -21,6 +22,20 @@ class MysqlService
     public function available(): bool
     {
         return $this->connect() !== null;
+    }
+
+    /** Server version string, e.g. "8.0.36" or "10.4.28-MariaDB". */
+    public function version(): ?string
+    {
+        $pdo = $this->connect();
+        if (! $pdo) {
+            return null;
+        }
+        try {
+            return (string) $pdo->query('SELECT VERSION()')->fetchColumn();
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     public function error(): ?string
@@ -184,6 +199,61 @@ class MysqlService
         $pdo->exec('FLUSH PRIVILEGES');
     }
 
+    /**
+     * Change the password of the admin account the panel itself connects with.
+     * The caller must persist the new password (DB_ADMIN_PASSWORD) or the panel
+     * loses access to MySQL on the next request.
+     */
+    public function changeAdminPassword(string $password): void
+    {
+        $user = (string) config('nexpanel.db_admin.user', 'root');
+        $this->assertIdentifier($user);
+        $pdo = $this->pdoOrFail();
+        $p = $pdo->quote($password);
+
+        $changed = false;
+        foreach (['localhost', '127.0.0.1', '%'] as $host) {
+            try {
+                $pdo->exec('ALTER USER ' . $pdo->quote($user) . '@' . $pdo->quote($host) . " IDENTIFIED BY {$p}");
+                $changed = true;
+            } catch (\Throwable $e) {
+                // that host grant does not exist — fine
+            }
+        }
+        if (! $changed) {
+            throw new \RuntimeException("Could not change the password for '{$user}'.");
+        }
+        $pdo->exec('FLUSH PRIVILEGES');
+    }
+
+    public function userExists(string $user): bool
+    {
+        $pdo = $this->connect();
+        if (! $pdo) {
+            return false;
+        }
+        try {
+            $stmt = $pdo->prepare('SELECT 1 FROM mysql.user WHERE User = ? LIMIT 1');
+            $stmt->execute([$user]);
+
+            return (bool) $stmt->fetchColumn();
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    public function databaseExists(string $name): bool
+    {
+        $pdo = $this->connect();
+        if (! $pdo) {
+            return false;
+        }
+        $stmt = $pdo->prepare('SELECT 1 FROM information_schema.schemata WHERE schema_name = ? LIMIT 1');
+        $stmt->execute([$name]);
+
+        return (bool) $stmt->fetchColumn();
+    }
+
     public function userGrants(string $user, string $host = 'localhost'): array
     {
         $this->assertIdentifier($user);
@@ -310,6 +380,139 @@ class MysqlService
         return is_file($file) ? $file : null;
     }
 
+    // ------------------------------------------------------------ recycle bin
+
+    /**
+     * Dump a database (plus its paired credentials) into the recycle bin, then
+     * drop it. Nothing is dropped unless the dump succeeded.
+     */
+    public function recycleDatabase(string $db, ?array $credential = null): string
+    {
+        $this->assertIdentifier($db);
+        $id = $db . '__' . date('Ymd_His');
+        $dump = $this->recycleDir() . '/' . $id . '.sql.gz';
+
+        $cmd = $this->mysqldumpCli($db) . ' | gzip > ' . escapeshellarg($dump);
+        $result = Process::timeout(900)->run(['bash', '-c', $cmd]);
+        if (! $result->successful() || ! is_file($dump) || filesize($dump) === 0) {
+            @unlink($dump);
+            throw new \RuntimeException(trim($result->errorOutput()) ?: 'Could not dump the database, so it was not deleted.');
+        }
+
+        $password = $credential['password'] ?? null;
+        file_put_contents($this->recycleDir() . '/' . $id . '.json', json_encode([
+            'db'         => $db,
+            'username'   => $credential['username'] ?? null,
+            // Encrypted at rest, like the db_credentials row it came from.
+            'password'   => $password ? Crypt::encryptString($password) : null,
+            'deleted_at' => date('Y-m-d H:i:s'),
+        ], JSON_PRETTY_PRINT));
+
+        $this->dropDatabase($db);
+
+        return $id;
+    }
+
+    public function listRecycled(): array
+    {
+        $out = [];
+        foreach (glob($this->recycleDir() . '/*.json') ?: [] as $metaFile) {
+            $id = basename($metaFile, '.json');
+            $dump = $this->recycleDir() . '/' . $id . '.sql.gz';
+            if (! is_file($dump)) {
+                continue;
+            }
+            $meta = json_decode((string) file_get_contents($metaFile), true) ?: [];
+            $out[] = [
+                'id'         => $id,
+                'db'         => $meta['db'] ?? $id,
+                'username'   => $meta['username'] ?? null,
+                'size'       => $this->humanSize((int) @filesize($dump)),
+                'deleted_at' => $meta['deleted_at'] ?? date('Y-m-d H:i:s', (int) @filemtime($dump)),
+            ];
+        }
+        usort($out, fn($a, $b) => strcmp($b['deleted_at'], $a['deleted_at']));
+
+        return $out;
+    }
+
+    /** Recreate a recycled database (and its paired user). Returns the metadata. */
+    public function restoreRecycled(string $id): array
+    {
+        $meta = $this->recycleMeta($id);
+        $db = $meta['db'];
+        $this->assertIdentifier($db);
+
+        if ($this->databaseExists($db)) {
+            throw new \RuntimeException("Database '{$db}' already exists — rename or drop it first.");
+        }
+
+        if (! empty($meta['username']) && ! empty($meta['password'])) {
+            $this->createDatabaseWithUser($db, $meta['username'], $meta['password']);
+        } else {
+            $this->createDatabase($db);
+        }
+
+        $this->importSql($db, $this->recycleDumpPath($id), $id . '.sql.gz');
+        $this->deleteRecycled($id);
+
+        return $meta;
+    }
+
+    public function deleteRecycled(string $id): void
+    {
+        $this->assertRecycleId($id);
+        @unlink($this->recycleDir() . '/' . $id . '.json');
+        @unlink($this->recycleDir() . '/' . $id . '.sql.gz');
+    }
+
+    public function recycleDumpPath(string $id): string
+    {
+        $this->assertRecycleId($id);
+        $path = $this->recycleDir() . '/' . $id . '.sql.gz';
+        if (! is_file($path)) {
+            throw new \RuntimeException('Recycled dump not found.');
+        }
+
+        return $path;
+    }
+
+    private function recycleMeta(string $id): array
+    {
+        $this->assertRecycleId($id);
+        $file = $this->recycleDir() . '/' . $id . '.json';
+        $meta = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
+        if (! is_array($meta) || empty($meta['db'])) {
+            throw new \RuntimeException('Recycled database not found.');
+        }
+
+        if (! empty($meta['password'])) {
+            try {
+                $meta['password'] = Crypt::decryptString($meta['password']);
+            } catch (\Throwable $e) {
+                // Written under a different APP_KEY — restore the data without the user.
+                $meta['password'] = null;
+            }
+        }
+
+        return $meta;
+    }
+
+    private function recycleDir(): string
+    {
+        $dir = storage_path('app/recycle');
+        @mkdir($dir, 0755, true);
+
+        return $dir;
+    }
+
+    private function assertRecycleId(string $id): void
+    {
+        if (! preg_match('/^[A-Za-z0-9_]+__\d{8}_\d{6}$/', $id)) {
+            throw new \InvalidArgumentException('Invalid recycle bin entry.');
+        }
+    }
+
     private function mysqlCli(string $db): string
     {
         return $this->clientBase('mysql') . ' ' . escapeshellarg($db);
@@ -323,9 +526,15 @@ class MysqlService
     private function clientBase(string $bin): string
     {
         $host = config('nexpanel.db_admin.host', '127.0.0.1');
+        $port = config('nexpanel.db_admin.port', 3306);
         $user = config('nexpanel.db_admin.user', 'root');
         $pass = config('nexpanel.db_admin.password', '');
-        $cmd = $bin . ' -h ' . escapeshellarg($host) . ' -u ' . escapeshellarg($user);
+        $exe  = config('nexpanel.bin.' . $bin, $bin);
+
+        $cmd = escapeshellarg($exe)
+            . ' -h ' . escapeshellarg($host)
+            . ' -P ' . escapeshellarg((string) $port)
+            . ' -u ' . escapeshellarg($user);
         if ($pass !== '') {
             $cmd .= ' -p' . escapeshellarg($pass);
         }

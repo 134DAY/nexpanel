@@ -21,4 +21,19 @@ return [
         'socket'   => env('DB_ADMIN_SOCKET'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | MySQL client binaries
+    |--------------------------------------------------------------------------
+    |
+    | Used for import, backup and recycle-bin dumps. Override with an absolute
+    | path when the clients are not on the web user's PATH.
+    |
+    */
+
+    'bin' => [
+        'mysql'     => env('DB_ADMIN_MYSQL_BIN', 'mysql'),
+        'mysqldump' => env('DB_ADMIN_MYSQLDUMP_BIN', 'mysqldump'),
+    ],
+
 ];

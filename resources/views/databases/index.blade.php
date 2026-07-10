@@ -34,18 +34,51 @@
     </div>
     @endunless
 
-    <div class="flex items-center justify-between">
+    @php $btn = 'flex items-center gap-2 px-3.5 py-2.5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/10 font-semibold rounded-xl transition-all text-sm disabled:opacity-40 disabled:cursor-not-allowed'; @endphp
+
+    <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="flex bg-slate-100 dark:bg-white/5 rounded-xl p-1">
             <button @click="tab='databases'" :class="tab==='databases' ? 'bg-white dark:bg-surface-800 shadow text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-400'" class="px-4 py-2 rounded-lg text-sm font-medium transition-all">Databases</button>
             <button @click="tab='users'" :class="tab==='users' ? 'bg-white dark:bg-surface-800 shadow text-slate-800 dark:text-white' : 'text-slate-500 dark:text-slate-400'" class="px-4 py-2 rounded-lg text-sm font-medium transition-all">Users</button>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+            <button @click="rp.open=true; rp.value=''" @disabled(!$available) class="{{ $btn }}">
+                <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/></svg>
+                Root password
+            </button>
+
             @if($phpmyadmin)
-            <a href="/databases-pma" target="_blank" class="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/10 font-semibold rounded-xl transition-all text-sm">
+            <a href="/databases-pma" target="_blank" class="{{ $btn }}">
                 <svg class="w-4 h-4 text-orange-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15H9v-6h2v6zm4 0h-2v-6h2v6z"/></svg>
                 phpMyAdmin
             </a>
             @endif
+
+            <button @click="$refs.syncForm.submit()" @disabled(!$available) class="{{ $btn }}">
+                <svg class="w-4 h-4 text-cyan-500" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992V4.356m-4.992 4.992l3.181-3.183a8.25 8.25 0 00-13.803 3.7M4.031 9.865v4.992h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7"/></svg>
+                Sync all
+            </button>
+
+            <button @click="openRecycle()" class="{{ $btn }} relative">
+                <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79"/></svg>
+                Recycle Bin
+                <span x-show="rb.count > 0" x-cloak class="ml-0.5 min-w-[1.25rem] px-1 py-0.5 rounded-full bg-slate-200 dark:bg-white/10 text-[11px] font-bold leading-none text-slate-600 dark:text-slate-300" x-text="rb.count"></span>
+            </button>
+
+            {{-- Engine version + service control --}}
+            <div class="relative" x-data="{ menu: false }" @click.outside="menu=false">
+                <button @click="menu=!menu" class="{{ $btn }}">
+                    <span class="w-2 h-2 rounded-full {{ $available ? 'bg-emerald-500' : 'bg-slate-400' }}"></span>
+                    <span class="font-mono">{{ $version ? 'MySQL ' . \Illuminate\Support\Str::before($version, '-') : 'MySQL offline' }}</span>
+                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                </button>
+                <div x-show="menu" x-cloak x-transition class="absolute right-0 mt-2 w-40 py-1 bg-white dark:bg-surface-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-30">
+                    <button @click="menu=false; svcAction('start')" class="w-full text-left px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5">Start</button>
+                    <button @click="menu=false; svcAction('restart')" class="w-full text-left px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5">Restart</button>
+                    <button @click="menu=false; svcAction('stop')" class="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10">Stop</button>
+                </div>
+            </div>
+
             <button @click="showCreate=true" @disabled(!$available) class="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold rounded-xl shadow-lg shadow-cyan-500/25 transition-all text-sm disabled:opacity-40 disabled:cursor-not-allowed">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
                 <span x-text="tab==='databases' ? 'Create Database' : 'Add User'"></span>
@@ -132,8 +165,67 @@
     </div>
 
     {{-- hidden forms --}}
-    <form x-ref="dropDbForm" method="POST" action="" class="hidden">@csrf @method('DELETE')</form>
+    <form x-ref="dropDbForm" method="POST" action="" class="hidden">@csrf @method('DELETE')<input type="hidden" name="permanent" x-ref="dropPermanent" value="0"></form>
     <form x-ref="dropUserForm" method="POST" action="/databases/users/drop" class="hidden">@csrf<input type="hidden" name="username" x-ref="duUser"><input type="hidden" name="host" x-ref="duHost"></form>
+    <form x-ref="syncForm" method="POST" action="/databases-sync" class="hidden">@csrf</form>
+
+    {{-- Root Password Modal --}}
+    <div x-show="rp.open" x-cloak x-transition.opacity class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @click.self="rp.open=false">
+        <div class="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-md">
+            <div class="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-700">
+                <h3 class="text-lg font-bold text-slate-800 dark:text-white">MySQL <span class="font-mono text-amber-500">{{ $adminUser }}</span> password</h3>
+                <button @click="rp.open=false" class="text-slate-400"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+            </div>
+            <form method="POST" action="/databases-root-password" class="p-6 space-y-4">
+                @csrf
+                <div class="flex gap-1">
+                    <input type="text" name="password" x-model="rp.value" minlength="8" placeholder="New password (min 8 chars)" required class="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+                    <button type="button" @click="rp.value=gen()" class="px-3 rounded-xl bg-slate-100 dark:bg-white/10 text-slate-500 text-xs shrink-0" title="Generate">🎲</button>
+                </div>
+                <p class="text-xs text-slate-500 dark:text-slate-400">This changes the password of the MySQL admin account the panel connects with, and saves it to <code class="font-mono">.env</code>. Anything else using the old password — other apps, scripts, cron jobs — will stop connecting.</p>
+                <div class="flex gap-3">
+                    <button type="submit" :disabled="rp.value.length < 8" class="flex-1 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white font-semibold rounded-xl text-sm disabled:opacity-40 disabled:cursor-not-allowed">Change password</button>
+                    <button type="button" @click="rp.open=false" class="px-4 py-2.5 bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 rounded-xl text-sm">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {{-- Recycle Bin Modal --}}
+    <div x-show="rb.open" x-cloak x-transition.opacity class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @click.self="rb.open=false">
+        <div class="bg-white dark:bg-surface-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-2xl flex flex-col" style="max-height:85vh">
+            <div class="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-700">
+                <h3 class="text-lg font-bold text-slate-800 dark:text-white">Recycle Bin</h3>
+                <button @click="rb.open=false" class="text-slate-400"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
+            </div>
+            <div class="overflow-auto">
+                <table class="w-full text-sm">
+                    <thead class="sticky top-0"><tr class="bg-slate-50 dark:bg-white/5">
+                        <th class="text-left px-5 py-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400">Database</th>
+                        <th class="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400">Size</th>
+                        <th class="text-left px-3 py-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400">Deleted</th>
+                        <th class="text-right px-5 py-2.5 text-xs font-semibold text-slate-500 dark:text-slate-400">Operate</th>
+                    </tr></thead>
+                    <tbody class="divide-y divide-slate-100 dark:divide-slate-800/40">
+                        <template x-for="i in rb.items" :key="i.id">
+                            <tr class="hover:bg-slate-50 dark:hover:bg-white/[0.02]">
+                                <td class="px-5 py-2.5 font-mono text-xs text-slate-700 dark:text-slate-300" x-text="i.db"></td>
+                                <td class="px-3 py-2.5 text-xs text-slate-500" x-text="i.size"></td>
+                                <td class="px-3 py-2.5 text-xs text-slate-500" x-text="i.deleted_at"></td>
+                                <td class="px-5 py-2.5 text-right whitespace-nowrap">
+                                    <button @click="rbRestore(i)" class="text-xs font-medium text-cyan-600 dark:text-cyan-400 hover:underline">Restore</button>
+                                    <a :href="'/databases-recycle/download?id='+encodeURIComponent(i.id)" class="text-xs font-medium text-slate-500 hover:underline ml-2">Download</a>
+                                    <button @click="rbPurge(i)" class="text-xs font-medium text-red-500 hover:underline ml-2">Delete forever</button>
+                                </td>
+                            </tr>
+                        </template>
+                        <template x-if="!rb.items.length"><tr><td colspan="4" class="px-5 py-8 text-center text-sm text-slate-400">The recycle bin is empty.</td></tr></template>
+                    </tbody>
+                </table>
+            </div>
+            <p class="px-5 py-3 border-t border-slate-200 dark:border-slate-700 text-xs text-slate-400">Deleted databases are kept here as compressed dumps until you delete them forever.</p>
+        </div>
+    </div>
 
     {{-- Create Modal --}}
     <div x-show="showCreate" x-cloak x-transition.opacity class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @click.self="showCreate=false">
@@ -274,8 +366,17 @@
                 <h3 class="text-lg font-bold text-slate-800 dark:text-white">Delete database</h3>
             </div>
             <div class="p-5 space-y-3">
-                <p class="text-sm text-slate-600 dark:text-slate-300">The data will be <strong class="text-red-500">completely deleted and cannot be recovered</strong>. Type <code class="px-1 rounded bg-slate-100 dark:bg-white/10 text-red-500" x-text="del.db"></code> to confirm.</p>
+                <template x-if="!del.permanent">
+                    <p class="text-sm text-slate-600 dark:text-slate-300">The database will be dumped into the <strong>recycle bin</strong> and then dropped. You can restore it later. Type <code class="px-1 rounded bg-slate-100 dark:bg-white/10 text-red-500" x-text="del.db"></code> to confirm.</p>
+                </template>
+                <template x-if="del.permanent">
+                    <p class="text-sm text-slate-600 dark:text-slate-300">The data will be <strong class="text-red-500">completely deleted and cannot be recovered</strong>. Type <code class="px-1 rounded bg-slate-100 dark:bg-white/10 text-red-500" x-text="del.db"></code> to confirm.</p>
+                </template>
                 <input type="text" x-model="del.confirm" @keydown.enter="confirmDrop()" placeholder="Type the database name" class="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-red-500">
+                <label class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 select-none">
+                    <input type="checkbox" x-model="del.permanent" class="rounded border-slate-300 dark:border-slate-600 text-red-500 focus:ring-red-500">
+                    Skip the recycle bin — delete permanently
+                </label>
                 <div class="flex justify-end gap-2 pt-1">
                     <button @click="del.open=false" class="px-4 py-2 bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 rounded-xl text-sm">Cancel</button>
                     <button @click="confirmDrop()" :disabled="del.confirm !== del.db" class="px-4 py-2 bg-red-500 text-white font-semibold rounded-xl text-sm disabled:opacity-40 disabled:cursor-not-allowed">Delete</button>
@@ -297,9 +398,61 @@ function databasePage() {
         pwd: { open: false, db: '', value: '' },
         perm: { open: false, db: '', username: '', grants: [], databases: [], newDb: '' },
         bk: { open: false, db: '', files: [], busy: false },
-        del: { open: false, db: '', confirm: '' },
+        del: { open: false, db: '', confirm: '', permanent: false },
+        rp: { open: false, value: '' },
+        rb: { open: false, items: [], count: {{ $recycled }} },
 
         gen() { return Array.from(crypto.getRandomValues(new Uint8Array(12))).map(b => 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[b % 62]).join(''); },
+
+        async svcAction(action) {
+            if (action === 'stop' && !confirm('Stop MySQL? The panel will lose its database connection.')) return;
+            try {
+                const res = await fetch('/api/services/action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                    body: JSON.stringify({ service: 'mysql', action }),
+                });
+                const d = await res.json();
+                if (!d.success) throw new Error(d.message || 'Command failed');
+                alert(d.message);
+                if (action !== 'stop') location.reload();
+            } catch (e) { alert(e.message); }
+        },
+
+        async openRecycle() {
+            this.rb.open = true;
+            await this.loadRecycled();
+        },
+        async loadRecycled() {
+            try {
+                const res = await fetch('/databases-recycle', { headers: { 'Accept': 'application/json' } });
+                const d = await res.json();
+                this.rb.items = d.items || [];
+                this.rb.count = this.rb.items.length;
+            } catch (e) { alert(e.message); }
+        },
+        async rbCall(path, id) {
+            const res = await fetch('/databases-recycle' + path, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                body: JSON.stringify({ id }),
+            });
+            const d = await res.json(); if (!res.ok) throw new Error(d.error || 'Error'); return d;
+        },
+        async rbRestore(item) {
+            if (!confirm('Restore database "' + item.db + '"?')) return;
+            try {
+                const d = await this.rbCall('/restore', item.id);
+                this.rb.items = d.items || []; this.rb.count = this.rb.items.length;
+                location.reload();
+            } catch (e) { alert(e.message); }
+        },
+        async rbPurge(item) {
+            if (!confirm('Permanently delete the dump of "' + item.db + '"? This cannot be undone.')) return;
+            try {
+                const d = await this.rbCall('/purge', item.id);
+                this.rb.items = d.items || []; this.rb.count = this.rb.items.length;
+            } catch (e) { alert(e.message); }
+        },
         openImport(db) { this.imp = { open: true, db }; },
         openPwd(db) { this.pwd = { open: true, db, value: this.gen() }; },
         async openPerm(db) {
@@ -318,10 +471,13 @@ function databasePage() {
                 await this.openPerm(this.perm.db);
             } catch (e) { alert(e.message); }
         },
-        dropDb(name) { this.del = { open: true, db: name, confirm: '' }; },
+        dropDb(name) { this.del = { open: true, db: name, confirm: '', permanent: false }; },
         confirmDrop() {
             if (this.del.confirm !== this.del.db) return;
-            const f = this.$refs.dropDbForm; f.action = '/databases/' + encodeURIComponent(this.del.db); f.submit();
+            const f = this.$refs.dropDbForm;
+            this.$refs.dropPermanent.value = this.del.permanent ? '1' : '0';
+            f.action = '/databases/' + encodeURIComponent(this.del.db);
+            f.submit();
         },
 
         async openBackup(db) {

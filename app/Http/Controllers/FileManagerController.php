@@ -13,6 +13,18 @@ class FileManagerController extends Controller
     /** Max size (bytes) a file may be to open in the text editor. */
     private const MAX_EDIT_SIZE = 2 * 1024 * 1024; // 2 MB
 
+    /** Content search budget — a search must never hang the panel. */
+    private const SEARCH_MAX_FILES     = 5000;
+    private const SEARCH_MAX_FILE_SIZE = 1024 * 1024; // 1 MB
+    private const SEARCH_MAX_RESULTS   = 200;
+    private const SEARCH_MAX_SECONDS   = 10;
+
+    /** Directories skipped by default during a content search. */
+    private const SEARCH_SKIP_DIRS = ['.git', 'node_modules', 'vendor', '.svn'];
+
+    /** Never delete these, trash or not. */
+    private const PROTECTED_PATHS = ['', '/', '/root', '/home', '/etc', '/var', '/usr', '/bin'];
+
     public function index(Request $request)
     {
         $path = $this->normalize($request->query('path', $this->defaultRoot()));
@@ -32,11 +44,129 @@ class FileManagerController extends Controller
         return view('files.index', [
             'files'       => $files,
             'path'        => $path,
+            'root'        => $this->defaultRoot(),
             'breadcrumbs' => $this->breadcrumbs($path),
             'disk'        => $this->diskUsage($path),
             'error'       => $error,
+            'trashCount'  => count($this->listTrash()),
             'isMock'      => false,
         ]);
+    }
+
+    /** Directory listing as JSON, so tabs can navigate without a page reload. */
+    public function list(Request $request): JsonResponse
+    {
+        $path = $this->normalize($request->query('path', $this->defaultRoot()));
+
+        if (! is_dir($path)) {
+            return response()->json(['error' => "Directory not found: {$path}"], 404);
+        }
+        if (! is_readable($path)) {
+            return response()->json(['error' => "Permission denied reading: {$path}"], 403);
+        }
+
+        return response()->json([
+            'path'        => $path,
+            'parent'      => $path === '/' ? null : dirname($path),
+            'breadcrumbs' => $this->breadcrumbs($path),
+            'files'       => $this->listDirectory($path),
+            'disk'        => $this->diskUsage($path),
+        ]);
+    }
+
+    /**
+     * Grep-like search for text inside files under a directory. Bounded by file
+     * count, file size, result count and wall-clock time.
+     */
+    public function search(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'path'    => 'required|string',
+            'query'   => 'required|string|min:2|max:200',
+            'include' => 'nullable|string|max:100',
+            'skip'    => 'nullable|boolean',
+        ]);
+
+        $root = $this->normalize($data['path']);
+        if (! is_dir($root)) {
+            return response()->json(['error' => 'Directory not found'], 404);
+        }
+
+        $needle  = $data['query'];
+        $include = trim((string) ($data['include'] ?? ''));
+        $skipHeavy = $request->boolean('skip', true);
+
+        $deadline = microtime(true) + self::SEARCH_MAX_SECONDS;
+        $results = [];
+        $scanned = 0;
+        $truncated = false;
+
+        foreach ($this->walk($root, $skipHeavy) as $file) {
+            if (microtime(true) > $deadline || $scanned >= self::SEARCH_MAX_FILES) {
+                $truncated = true;
+                break;
+            }
+            if ($include !== '' && ! fnmatch($include, $file->getFilename())) {
+                continue;
+            }
+            $size = $file->getSize();
+            if ($size === false || $size > self::SEARCH_MAX_FILE_SIZE || $size === 0) {
+                continue;
+            }
+            $scanned++;
+
+            $content = @file_get_contents($file->getPathname());
+            if ($content === false || str_contains($content, "\0") || ! str_contains($content, $needle)) {
+                continue;
+            }
+
+            foreach (explode("\n", $content) as $i => $line) {
+                if (! str_contains($line, $needle)) {
+                    continue;
+                }
+                if (count($results) >= self::SEARCH_MAX_RESULTS) {
+                    $truncated = true;
+                    break 2;
+                }
+                $results[] = [
+                    'path' => $file->getPathname(),
+                    'name' => $file->getFilename(),
+                    'line' => $i + 1,
+                    'text' => mb_substr(trim($line), 0, 200),
+                ];
+            }
+        }
+
+        ActivityLogger::log('file.search', "Searched \"{$needle}\" under {$root} — " . count($results) . ' hit(s)');
+
+        return response()->json([
+            'results'   => $results,
+            'scanned'   => $scanned,
+            'truncated' => $truncated,
+        ]);
+    }
+
+    /** Files under $root, optionally pruning heavy dependency directories. */
+    private function walk(string $root, bool $skipHeavy): \Generator
+    {
+        $dir = new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS | \FilesystemIterator::FOLLOW_SYMLINKS);
+
+        $filtered = new \RecursiveCallbackFilterIterator($dir, function (\SplFileInfo $current) use ($skipHeavy) {
+            if ($current->isDir()) {
+                return ! $skipHeavy || ! in_array($current->getFilename(), self::SEARCH_SKIP_DIRS, true);
+            }
+
+            return true;
+        });
+
+        $it = new \RecursiveIteratorIterator($filtered, \RecursiveIteratorIterator::LEAVES_ONLY);
+        $it->setMaxDepth(20);
+
+        foreach ($it as $file) {
+            if ($file instanceof \SplFileInfo && $file->isFile() && $file->isReadable()) {
+                yield $file;
+            }
+        }
     }
 
     /** Return the contents of a text file for the in-browser editor. */
@@ -148,15 +278,25 @@ class FileManagerController extends Controller
 
     public function delete(Request $request): JsonResponse
     {
-        $request->validate(['path' => 'required|string']);
+        $request->validate(['path' => 'required|string', 'permanent' => 'nullable|boolean']);
         $path = $this->normalize($request->input('path'));
 
         if (! file_exists($path)) {
             return response()->json(['error' => 'Not found'], 404);
         }
-        // Guard against catastrophic deletes.
-        if (in_array(rtrim($path, '/'), ['', '/', '/root', '/home', '/etc', '/var', '/usr', '/bin'], true)) {
+        if ($this->isProtected($path)) {
             return response()->json(['error' => 'Refusing to delete a protected system path'], 403);
+        }
+
+        if (! $request->boolean('permanent')) {
+            try {
+                $this->moveToTrash($path);
+            } catch (\Throwable $e) {
+                return response()->json(['error' => $e->getMessage()], 403);
+            }
+            ActivityLogger::log('file.trash', "Moved {$path} to the recycle bin");
+
+            return response()->json(['ok' => true, 'trashed' => true]);
         }
 
         $ok = is_dir($path) ? $this->rrmdir($path) : @unlink($path);
@@ -166,9 +306,162 @@ class FileManagerController extends Controller
         if (! $ok && file_exists($path)) {
             return response()->json(['error' => 'Permission denied'], 403);
         }
-        ActivityLogger::log('file.delete', "Deleted {$path}");
+        ActivityLogger::log('file.delete', "Permanently deleted {$path}", 'warning');
 
         return response()->json(['ok' => true]);
+    }
+
+    // ------------------------------------------------------------ recycle bin
+
+    public function trash(): JsonResponse
+    {
+        return response()->json(['items' => $this->listTrash()]);
+    }
+
+    public function trashRestore(Request $request): JsonResponse
+    {
+        $data = $request->validate(['id' => 'required|string']);
+        try {
+            $meta = $this->trashMeta($data['id']);
+            $target = $meta['original_path'];
+
+            if (file_exists($target)) {
+                return response()->json(['error' => basename($target) . ' already exists at the original location.'], 409);
+            }
+            if (! is_dir(dirname($target))) {
+                return response()->json(['error' => 'The original directory no longer exists: ' . dirname($target)], 409);
+            }
+
+            $stored = $this->trashDir() . '/' . $data['id'];
+            if (! @rename($stored, $target) && ! $this->runRoot('mv ' . escapeshellarg($stored) . ' ' . escapeshellarg($target))) {
+                return response()->json(['error' => 'Permission denied restoring to ' . $target], 403);
+            }
+            @unlink($this->trashDir() . '/' . $data['id'] . '.json');
+            ActivityLogger::log('file.trash.restore', "Restored {$target} from the recycle bin");
+
+            return response()->json(['ok' => true, 'items' => $this->listTrash()]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    public function trashPurge(Request $request): JsonResponse
+    {
+        $data = $request->validate(['id' => 'required|string']);
+        try {
+            $this->assertTrashId($data['id']);
+            $stored = $this->trashDir() . '/' . $data['id'];
+            if (is_dir($stored)) {
+                $this->rrmdir($stored);
+            } else {
+                @unlink($stored);
+            }
+            if (file_exists($stored)) {
+                $this->runRoot('rm -rf ' . escapeshellarg($stored));
+            }
+            @unlink($this->trashDir() . '/' . $data['id'] . '.json');
+            ActivityLogger::log('file.trash.purge', "Permanently deleted {$data['id']} from the recycle bin", 'danger');
+
+            return response()->json(['ok' => true, 'items' => $this->listTrash()]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    /** Move a path into the trash directory, recording where it came from. */
+    private function moveToTrash(string $path): void
+    {
+        $id = bin2hex(random_bytes(8));
+        $stored = $this->trashDir() . '/' . $id;
+
+        if (! @rename($path, $stored)) {
+            // Different filesystem, or not ours to move — try as root, then copy.
+            if (! $this->runRoot('mv ' . escapeshellarg($path) . ' ' . escapeshellarg($stored))) {
+                if (is_dir($path)) {
+                    $this->recursiveCopy($path, $stored);
+                    $this->rrmdir($path);
+                } elseif (! @copy($path, $stored) || ! @unlink($path)) {
+                    throw new \RuntimeException('Permission denied moving to the recycle bin.');
+                }
+            }
+        }
+        if (! file_exists($stored)) {
+            throw new \RuntimeException('Permission denied moving to the recycle bin.');
+        }
+
+        file_put_contents($this->trashDir() . '/' . $id . '.json', json_encode([
+            'id'            => $id,
+            'name'          => basename($path),
+            'original_path' => $path,
+            'type'          => is_dir($stored) ? 'directory' : 'file',
+            'deleted_at'    => date('Y-m-d H:i:s'),
+        ], JSON_PRETTY_PRINT));
+    }
+
+    private function listTrash(): array
+    {
+        $out = [];
+        foreach (glob($this->trashDir() . '/*.json') ?: [] as $metaFile) {
+            $meta = json_decode((string) @file_get_contents($metaFile), true);
+            if (! is_array($meta) || empty($meta['id']) || ! file_exists($this->trashDir() . '/' . $meta['id'])) {
+                continue;
+            }
+            $stored = $this->trashDir() . '/' . $meta['id'];
+            $meta['size'] = is_dir($stored)
+                ? $this->humanSize($this->dirSize($stored))
+                : $this->humanSize((int) @filesize($stored));
+            $out[] = $meta;
+        }
+        usort($out, fn($a, $b) => strcmp($b['deleted_at'] ?? '', $a['deleted_at'] ?? ''));
+
+        return $out;
+    }
+
+    private function trashMeta(string $id): array
+    {
+        $this->assertTrashId($id);
+        $file = $this->trashDir() . '/' . $id . '.json';
+        $meta = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
+        if (! is_array($meta) || empty($meta['original_path'])) {
+            throw new \RuntimeException('Recycle bin entry not found.');
+        }
+
+        return $meta;
+    }
+
+    private function trashDir(): string
+    {
+        $dir = storage_path('app/trash');
+        @mkdir($dir, 0755, true);
+
+        return $dir;
+    }
+
+    private function assertTrashId(string $id): void
+    {
+        if (! preg_match('/^[a-f0-9]{16}$/', $id)) {
+            throw new \InvalidArgumentException('Invalid recycle bin entry.');
+        }
+    }
+
+    private function isProtected(string $path): bool
+    {
+        $trimmed = rtrim($path, '/');
+        if (in_array($trimmed, self::PROTECTED_PATHS, true)) {
+            return true;
+        }
+        // Any filesystem root (Linux "/" or a Windows drive root like "C:\") —
+        // a root is its own parent. Never let one of these be deleted.
+        $real = realpath($path);
+        if ($real !== false && dirname($real) === $real) {
+            return true;
+        }
+        // Windows drive root written with forward slashes, e.g. "C:".
+        if (preg_match('/^[A-Za-z]:$/', $trimmed)) {
+            return true;
+        }
+
+        return false;
     }
 
     public function upload(Request $request): JsonResponse

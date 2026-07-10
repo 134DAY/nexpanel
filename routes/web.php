@@ -36,6 +36,12 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/databases', [DatabaseController::class, 'index'])->name('databases.index');
     Route::post('/databases', [DatabaseController::class, 'store'])->name('databases.store');
     Route::post('/databases/users/drop', [DatabaseController::class, 'dropUser'])->name('databases.users.drop');
+    Route::post('/databases-root-password', [DatabaseController::class, 'rootPassword'])->name('databases.root_password');
+    Route::post('/databases-sync', [DatabaseController::class, 'syncAll'])->name('databases.sync');
+    Route::get('/databases-recycle', [DatabaseController::class, 'recycled'])->name('databases.recycle');
+    Route::post('/databases-recycle/restore', [DatabaseController::class, 'restoreRecycled'])->name('databases.recycle.restore');
+    Route::post('/databases-recycle/purge', [DatabaseController::class, 'purgeRecycled'])->name('databases.recycle.purge');
+    Route::get('/databases-recycle/download', [DatabaseController::class, 'downloadRecycled'])->name('databases.recycle.download');
     Route::put('/databases/{name}/password', [DatabaseController::class, 'changePassword'])->name('databases.password');
     Route::post('/databases/{name}/import', [DatabaseController::class, 'import'])->name('databases.import');
     Route::get('/databases/{name}/permission', [DatabaseController::class, 'permission'])->name('databases.permission');
@@ -58,6 +64,11 @@ Route::middleware(['auth'])->group(function () {
 
     // File Manager (Phase 3)
     Route::get('/files', [FileManagerController::class, 'index'])->name('files.index');
+    Route::get('/files/list', [FileManagerController::class, 'list'])->name('files.list');
+    Route::get('/files/search', [FileManagerController::class, 'search'])->name('files.search');
+    Route::get('/files/trash', [FileManagerController::class, 'trash'])->name('files.trash');
+    Route::post('/files/trash/restore', [FileManagerController::class, 'trashRestore'])->name('files.trash.restore');
+    Route::post('/files/trash/purge', [FileManagerController::class, 'trashPurge'])->name('files.trash.purge');
     Route::get('/files/read', [FileManagerController::class, 'read'])->name('files.read');
     Route::get('/files/download', [FileManagerController::class, 'download'])->name('files.download');
     Route::post('/files/save', [FileManagerController::class, 'save'])->name('files.save');

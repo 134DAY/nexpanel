@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\DbCredential;
 use App\Services\ActivityLogger;
+use App\Services\EnvWriter;
 use App\Services\MysqlService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -36,8 +38,120 @@ class DatabaseController extends Controller
             'available'  => $available,
             'connError'  => $available ? null : $this->mysql->error(),
             'phpmyadmin' => is_dir('/usr/share/phpmyadmin'),
+            'version'    => $available ? $this->mysql->version() : null,
+            'adminUser'  => (string) config('nexpanel.db_admin.user', 'root'),
+            'recycled'   => count($this->mysql->listRecycled()),
             'isMock'     => false,
         ]);
+    }
+
+    /**
+     * Change the password of the MySQL admin account and persist it to .env,
+     * otherwise the panel cannot reconnect on the next request.
+     */
+    public function rootPassword(Request $request)
+    {
+        $data = $request->validate(['password' => 'required|string|min:8|max:255']);
+        if (! $this->mysql->available()) {
+            return back()->with('error', 'Cannot connect to MySQL.');
+        }
+
+        $user = (string) config('nexpanel.db_admin.user', 'root');
+        try {
+            EnvWriter::set('DB_ADMIN_PASSWORD', $data['password']);
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Password not changed: ' . $e->getMessage());
+        }
+
+        try {
+            $this->mysql->changeAdminPassword($data['password']);
+        } catch (\Throwable $e) {
+            // Roll the .env back so the stored password still matches the server.
+            EnvWriter::set('DB_ADMIN_PASSWORD', (string) config('nexpanel.db_admin.password', ''));
+
+            return back()->with('error', $e->getMessage());
+        }
+
+        Artisan::call('config:clear');
+        ActivityLogger::log('database.root.password', "Changed the MySQL {$user} password", 'warning');
+
+        return back()->with('success', "Password for '{$user}' updated and saved to .env.");
+    }
+
+    /**
+     * Reconcile the stored credentials with the live server: forget credentials
+     * for databases that no longer exist, and adopt databases that already have
+     * a same-named MySQL user.
+     */
+    public function syncAll()
+    {
+        if (! $this->mysql->available()) {
+            return back()->with('error', 'Cannot connect to MySQL.');
+        }
+
+        $live = array_column($this->mysql->databases(), 'name');
+        $pruned = DbCredential::whereNotIn('db_name', $live ?: [''])->delete();
+
+        $adopted = 0;
+        $known = DbCredential::pluck('db_name')->all();
+        foreach (array_diff($live, $known) as $name) {
+            if ($this->mysql->userExists($name)) {
+                DbCredential::create(['db_name' => $name, 'username' => $name, 'password' => '']);
+                $adopted++;
+            }
+        }
+
+        ActivityLogger::log('database.sync', "Synced databases: {$adopted} adopted, {$pruned} pruned");
+
+        return back()->with('success', "Synced — {$adopted} database(s) adopted, {$pruned} stale credential(s) removed.");
+    }
+
+    // -------- recycle bin --------
+
+    public function recycled(): JsonResponse
+    {
+        return response()->json(['items' => $this->mysql->listRecycled()]);
+    }
+
+    public function restoreRecycled(Request $request): JsonResponse
+    {
+        $data = $request->validate(['id' => 'required|string']);
+        try {
+            $meta = $this->mysql->restoreRecycled($data['id']);
+            if (! empty($meta['username']) && ! empty($meta['password'])) {
+                DbCredential::updateOrCreate(
+                    ['db_name' => $meta['db']],
+                    ['username' => $meta['username'], 'password' => $meta['password']],
+                );
+            }
+            ActivityLogger::log('database.recycle.restore', "Restored {$meta['db']} from the recycle bin", 'warning');
+
+            return response()->json(['ok' => true, 'items' => $this->mysql->listRecycled()]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    public function purgeRecycled(Request $request): JsonResponse
+    {
+        $data = $request->validate(['id' => 'required|string']);
+        try {
+            $this->mysql->deleteRecycled($data['id']);
+            ActivityLogger::log('database.recycle.purge', "Permanently deleted {$data['id']}", 'danger');
+
+            return response()->json(['ok' => true, 'items' => $this->mysql->listRecycled()]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    public function downloadRecycled(Request $request): BinaryFileResponse
+    {
+        try {
+            return response()->download($this->mysql->recycleDumpPath((string) $request->query('id')));
+        } catch (\Throwable $e) {
+            abort(404, 'Recycled dump not found');
+        }
     }
 
     public function store(Request $request)
@@ -249,10 +363,22 @@ class DatabaseController extends Controller
         if (! $this->mysql->available()) {
             return back()->with('error', 'Cannot connect to MySQL.');
         }
+        $permanent = $request->boolean('permanent');
+        $cred = DbCredential::where('db_name', $name)->first();
+
         try {
-            $this->mysql->dropDatabase($name);
+            if ($permanent) {
+                $this->mysql->dropDatabase($name);
+            } else {
+                // Dumps first and only drops if the dump succeeded.
+                $this->mysql->recycleDatabase($name, $cred ? [
+                    'username' => $cred->username,
+                    'password' => $cred->password,
+                ] : null);
+            }
+
             // Also drop the paired user + stored credential.
-            if ($cred = DbCredential::where('db_name', $name)->first()) {
+            if ($cred) {
                 try {
                     $this->mysql->dropUser($cred->username, 'localhost');
                     $this->mysql->dropUser($cred->username, '127.0.0.1');
@@ -261,9 +387,11 @@ class DatabaseController extends Controller
                 }
                 $cred->delete();
             }
-            ActivityLogger::log('database.drop', "Dropped database {$name}", 'warning');
+            ActivityLogger::log('database.drop', "Dropped database {$name}" . ($permanent ? ' (permanent)' : ' (moved to recycle bin)'), 'warning');
 
-            return back()->with('success', "Database '{$name}' dropped.");
+            return back()->with('success', $permanent
+                ? "Database '{$name}' permanently deleted."
+                : "Database '{$name}' moved to the recycle bin.");
         } catch (\Throwable $e) {
             return back()->with('error', $e->getMessage());
         }
