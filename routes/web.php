@@ -5,6 +5,7 @@ use App\Http\Controllers\CronController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
 use App\Http\Controllers\FileManagerController;
+use App\Http\Controllers\LogController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PlaceholderController;
 use App\Http\Controllers\ProfileController;
@@ -88,6 +89,16 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/cron/{id}/toggle', [CronController::class, 'toggle'])->name('cron.toggle');
     Route::post('/cron/{id}/run', [CronController::class, 'run'])->name('cron.run');
     Route::delete('/cron/{id}', [CronController::class, 'destroy'])->name('cron.destroy');
+
+    // Logs
+    Route::get('/logs', [LogController::class, 'index'])->name('logs.index');
+    Route::get('/logs/operations', [LogController::class, 'operations'])->name('logs.operations');
+    Route::delete('/logs/operations', [LogController::class, 'clearOperations'])->name('logs.operations.clear');
+    Route::get('/logs/run', [LogController::class, 'run'])->name('logs.run');
+    Route::delete('/logs/run', [LogController::class, 'clearRun'])->name('logs.run.clear');
+    Route::get('/logs/cron', [LogController::class, 'cronList'])->name('logs.cron');
+    Route::get('/logs/cron/{key}', [LogController::class, 'cronShow'])->name('logs.cron.show');
+    Route::delete('/logs/cron/{key}', [LogController::class, 'clearCron'])->name('logs.cron.clear');
 
     // Web Terminal (Phase 3)
     Route::get('/terminal', [TerminalController::class, 'index'])->name('terminal.index');
