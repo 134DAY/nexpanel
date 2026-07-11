@@ -14,6 +14,7 @@ use App\Http\Controllers\SecurityController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SSLController;
 use App\Http\Controllers\TerminalController;
+use App\Http\Controllers\UpdateController;
 use App\Http\Controllers\WebsiteController;
 use Illuminate\Support\Facades\Route;
 
@@ -130,6 +131,11 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/api/ai/sessions', [AIController::class, 'sessions'])->name('ai.sessions');
     Route::delete('/api/ai/session', [AIController::class, 'deleteSession'])->name('ai.deleteSession');
     Route::post('/api/ai/new-session', [AIController::class, 'newSession'])->name('ai.newSession');
+
+    // Panel self-update (from the UI)
+    Route::get('/api/update/check', [UpdateController::class, 'check'])->name('update.check');
+    Route::get('/api/update/status', [UpdateController::class, 'status'])->name('update.status');
+    Route::post('/api/update/run', [UpdateController::class, 'run'])->name('update.run');
 
     // Settings (with tabs)
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');

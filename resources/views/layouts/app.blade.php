@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full" x-data="{ dark: localStorage.getItem('theme') !== 'light' }" x-init="$watch('dark', v => { localStorage.setItem('theme', v ? 'dark' : 'light') })" :class="{ 'dark': dark }">
 <head>
+    {{-- Apply the saved theme BEFORE first paint to avoid a white flash on navigation. --}}
+    <script>
+        (function () {
+            try {
+                if (localStorage.getItem('theme') !== 'light') {
+                    document.documentElement.classList.add('dark');
+                    document.documentElement.style.backgroundColor = '#010410';
+                }
+            } catch (e) {}
+        })();
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
@@ -191,6 +202,72 @@
             </div>
 
             <div class="flex items-center gap-4">
+                {{-- Update available --}}
+                <div x-data="updateWidget()" x-init="check()" x-cloak>
+                    <button x-show="available" @click="open = true"
+                            class="relative flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors">
+                        <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12a7.5 7.5 0 0013.5 4.5m1.5-4.5A7.5 7.5 0 006 7.5m0 0V3m0 4.5H1.5m18 4.5v4.5m0-4.5h4.5"/></svg>
+                        อัปเดต <span x-text="behind"></span>
+                    </button>
+
+                    {{-- Update modal (teleported to body so .glass ancestors can't clip the fixed overlay) --}}
+                    <template x-teleport="body">
+                    <div x-show="open" x-cloak @keydown.escape.window="!running && (open = false)"
+                         class="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <div class="absolute inset-0 bg-black/50" @click="!running && (open = false)"></div>
+                        <div class="relative w-full max-w-lg bg-white dark:bg-surface-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                            <div class="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+                                <h3 class="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                    <span class="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center">
+                                        <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+                                    </span>
+                                    มีอัปเดตใหม่ของ NexPanel
+                                </h3>
+                                <button @click="!running && (open = false)" class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                                </button>
+                            </div>
+
+                            <div class="p-5">
+                                <template x-if="!started">
+                                    <div>
+                                        <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">
+                                            เวอร์ชันปัจจุบัน <code class="text-cyan-500" x-text="current"></code>
+                                            → ล่าสุด <code class="text-cyan-500" x-text="latest"></code>
+                                            (<span x-text="behind"></span> การเปลี่ยนแปลง)
+                                        </p>
+                                        <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">สิ่งที่จะอัปเดต</p>
+                                        <div class="max-h-52 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700/60">
+                                            <template x-for="c in commits" :key="c.hash">
+                                                <div class="flex items-start gap-2 p-2.5 text-xs">
+                                                    <code class="text-cyan-500 shrink-0" x-text="c.hash"></code>
+                                                    <span class="text-slate-600 dark:text-slate-300" x-text="c.subject"></span>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+                                <template x-if="started">
+                                    <pre class="max-h-72 overflow-auto rounded-xl bg-slate-900 text-slate-100 text-[11px] leading-relaxed p-3 whitespace-pre-wrap" x-text="log"></pre>
+                                </template>
+                            </div>
+
+                            <div class="flex items-center justify-end gap-3 p-4 border-t border-slate-200 dark:border-slate-700">
+                                <span x-show="running" class="mr-auto text-xs text-amber-500 flex items-center gap-2">
+                                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                                    กำลังอัปเดต… อย่าปิดหน้านี้
+                                </span>
+                                <span x-show="done && success" class="mr-auto text-xs text-emerald-500">✅ อัปเดตเสร็จ กำลังรีโหลด…</span>
+                                <span x-show="done && !success" class="mr-auto text-xs text-red-500">❌ อัปเดตล้มเหลว — ดู log ด้านบน</span>
+                                <button x-show="!running" @click="open = false" class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 dark:hover:bg-white/10">ปิด</button>
+                                <button x-show="!started" @click="start()" class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white text-sm font-semibold shadow-lg shadow-cyan-500/25">อัปเดตเลย</button>
+                            </div>
+                        </div>
+                    </div>
+                    </template>
+                </div>
+
                 {{-- Theme Toggle --}}
                 <button @click="dark = !dark" class="relative w-14 h-7 rounded-full bg-slate-200 dark:bg-slate-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 dark:focus:ring-offset-surface-900">
                     <div class="absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow-md transition-transform duration-300 flex items-center justify-center" :class="dark ? 'translate-x-7' : 'translate-x-0'">
@@ -215,6 +292,49 @@
     </div>
 </div>
 
+<script>
+    function updateWidget() {
+        const csrf = document.querySelector('meta[name="csrf-token"]').content;
+        return {
+            available: false, current: '', latest: '', behind: 0, commits: [],
+            open: false, started: false, running: false, done: false, success: false, log: '',
+            async check() {
+                try {
+                    const r = await fetch('/api/update/check');
+                    const d = await r.json();
+                    this.available = d.updateAvailable;
+                    this.current = d.current; this.latest = d.latest;
+                    this.behind = d.behind; this.commits = d.commits || [];
+                } catch (e) { /* offline / no git — hide the widget */ }
+            },
+            async start() {
+                this.started = true; this.running = true; this.log = 'กำลังเริ่มอัปเดต…';
+                try {
+                    const r = await fetch('/api/update/run', {
+                        method: 'POST',
+                        headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                    });
+                    const d = await r.json();
+                    if (!d.ok) { this.running = false; this.log = d.message || 'เริ่มไม่สำเร็จ'; return; }
+                    this.poll();
+                } catch (e) { this.running = false; this.log = 'เริ่มไม่สำเร็จ: ' + e.message; }
+            },
+            async poll() {
+                try {
+                    const r = await fetch('/api/update/status');
+                    const d = await r.json();
+                    if (d.log) this.log = d.log;
+                    if (d.done) {
+                        this.running = false; this.done = true; this.success = d.success;
+                        if (d.success) setTimeout(() => location.reload(), 2500);
+                        return;
+                    }
+                } catch (e) { /* php-fpm reload mid-update drops a poll — keep trying */ }
+                setTimeout(() => this.poll(), 2000);
+            },
+        };
+    }
+</script>
 @stack('scripts')
 </body>
 </html>

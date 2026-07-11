@@ -59,7 +59,17 @@ cd /var/www/nexpanel && sudo bash update.sh
 ### Security (ufw) — ใหม่
 - **Firewall tab** — เปิด/ปิดพอร์ต + rule ตาม IP ผ่าน ufw
 
-### Monitoring + Network + LINE — ใหม่ล่าสุด (ปิดสโคป 1.3.2.1 / 1.3.2.2 / 1.3.3.2)
+### UI/UX fixes + In-panel updater — ใหม่ล่าสุด
+- **รวม layout เหลืออันเดียว**: dashboard เดิมใช้ `components/layouts/app.blade.php` (เมนูเก่า ขาด Security/Logs) → เปลี่ยนเป็น `@extends('layouts.app')` เหมือนหน้าอื่น เมนูครบทุกหน้าแล้ว (ไฟล์ component layout กลายเป็น dead ไม่มีใครใช้)
+- **แก้ theme flash (จอขาวแวปตอนเปลี่ยนหน้า)**: เพิ่ม inline script ใน `<head>` ของ layouts/app + guest ที่ใส่ class `dark` + bg สีเข้มก่อน paint (กัน FOUC จาก Alpine ที่โหลดทีหลัง)
+- **ปุ่มอัปเดตในหน้าเว็บ (แทนการพิมพ์ update.sh)**: `UpdateController` (check/run/status) + ปุ่มบน topbar ทุกหน้า
+  - `check` → git fetch (cache 30 นาที) เทียบ HEAD vs origin/main โชว์ changelog (commit list)
+  - `run` → ยิง update.sh แบบ detached ผ่าน `nexpanel-run` → `systemd-run --collect` (ไม่ --wait) รอด php-fpm reload; log ไป storage/logs/update-run.log
+  - `status` → poll log + sentinel `___NEXPANEL_UPDATE_DONE___ exit=N`; เสร็จแล้ว reload อัตโนมัติ
+  - modal ใช้ `x-teleport="body"` กัน `.glass` (backdrop-filter) clip
+  - ⚠️ ต้องรัน update.sh manual **1 ครั้ง** เพื่อ deploy ฟีเจอร์นี้ก่อน จากนั้น push ครั้งถัดไปจะเห็นปุ่มเด้ง
+
+### Monitoring + Network + LINE (ปิดสโคป 1.3.2.1 / 1.3.2.2 / 1.3.3.2)
 - **Network metric**: `ServerMetricsService::getNetworkUsage()` อ่าน `/proc/net/dev` (rx/tx KB/s + total MB), การ์ด Network + เส้นในกราฟ dashboard (secondary axis)
 - **Threshold + auto-alert**: `app/Console/Commands/MonitorServer.php` (`nexpanel:monitor`) — เช็ค CPU/RAM/Disk เกินเกณฑ์, service ล่ม, SSL ใกล้หมด, cron fail; state machine (alert ครั้งเดียว + cooldown + resolved)
 - **Scheduler**: `bootstrap/app.php` → `withSchedule` รัน monitor ทุกนาที; cron `/etc/cron.d/nexpanel` ตั้งใน install.sh + update.sh (`schedule:run`)

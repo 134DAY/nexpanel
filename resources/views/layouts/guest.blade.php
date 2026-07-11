@@ -1,6 +1,16 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full" x-data="{ dark: localStorage.getItem('theme') !== 'light' }" x-init="$watch('dark', v => { localStorage.setItem('theme', v ? 'dark' : 'light') })" :class="{ 'dark': dark }">
 <head>
+    <script>
+        (function () {
+            try {
+                if (localStorage.getItem('theme') !== 'light') {
+                    document.documentElement.classList.add('dark');
+                    document.documentElement.style.backgroundColor = '#010410';
+                }
+            } catch (e) {}
+        })();
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NexPanel — Login</title>

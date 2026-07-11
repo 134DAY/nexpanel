@@ -1,6 +1,8 @@
-<x-layouts.app>
-    @section('title', 'Dashboard')
+@extends('layouts.app')
 
+@section('title', 'Dashboard')
+
+@section('content')
     {{-- Welcome Banner --}}
     <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 p-6 mb-6">
         <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djItSDI0di0yaDEyek0zNiAyNHYySDI0di0yaDEyeiIvPjwvZz48L2c+PC9zdmc+')] opacity-30"></div>
@@ -157,8 +159,9 @@
             </div>
         </div>
     </div>
+@endsection
 
-    @push('scripts')
+@push('scripts')
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
         const isDark = () => document.documentElement.classList.contains('dark');
@@ -244,5 +247,3 @@
         setInterval(fetchMetrics, 3000);
     </script>
     @endpush
-
-</x-layouts.app>
