@@ -203,7 +203,7 @@
 
             <div class="flex items-center gap-4">
                 {{-- Update available --}}
-                <div x-data="updateWidget()" x-init="check()" x-cloak>
+                <div x-data="updateWidget()" x-init="check(); setInterval(() => { if (!open) check() }, 900000)" x-cloak>
                     <button x-show="available" @click="open = true"
                             class="relative flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors">
                         <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
