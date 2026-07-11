@@ -36,6 +36,6 @@ class PlaceholderController extends Controller
 
     public function notifications()
     {
-        return view('placeholder', ['title' => 'Notifications', 'description' => 'LINE Notify & Discord Webhook alerts — Coming in Phase 4']);
+        return view('placeholder', ['title' => 'Notifications', 'description' => 'LINE Messaging API alerts — Coming in Phase 4']);
     }
 }

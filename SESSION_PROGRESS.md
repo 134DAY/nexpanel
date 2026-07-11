@@ -28,7 +28,7 @@ cd /var/www/nexpanel && sudo bash update.sh
 
 ### Core
 - Dashboard (metric สด + **Network rx/tx** + กราฟ CPU/RAM/Network), Service Control (systemctl จริง), Settings, Auth
-- Notifications (Discord/Telegram/**LINE Messaging API**/webhook/email)
+- Notifications = **LINE Messaging API** เท่านั้น (ตัด Discord/Telegram/webhook/email ออกให้ตรงสโคปเอกสาร 1.3.3.1)
 - **Monitoring & Alerts** — threshold CPU/RAM/Disk + service down + SSL ใกล้หมด + cron fail (command `nexpanel:monitor` ทุก 1 นาที ผ่าน scheduler)
 - Cron, Web Terminal (cd persist), SSL (certbot), Website/Nginx
 
@@ -64,6 +64,7 @@ cd /var/www/nexpanel && sudo bash update.sh
 - **Threshold + auto-alert**: `app/Console/Commands/MonitorServer.php` (`nexpanel:monitor`) — เช็ค CPU/RAM/Disk เกินเกณฑ์, service ล่ม, SSL ใกล้หมด, cron fail; state machine (alert ครั้งเดียว + cooldown + resolved)
 - **Scheduler**: `bootstrap/app.php` → `withSchedule` รัน monitor ทุกนาที; cron `/etc/cron.d/nexpanel` ตั้งใน install.sh + update.sh (`schedule:run`)
 - **LINE Messaging API**: channel `line` ใน NotificationService (push API) แทน LINE Notify ที่ปิดตัว; ตั้งค่า channel access token + recipient id ในหน้า Notifications
+- **ตัดช่องอื่นออกหมด** (Discord/Telegram/Webhook/Email) เหลือแค่ LINE ให้ตรงสโคปเอกสาร — NotificationService::CHANNELS = ['line'], KEYS/validation/view ตัดตามหมด
 - **UI**: การ์ด "Monitoring & Alerts" (threshold + toggle events) และการ์ด LINE ในหน้า Notifications
 - ⚠️ **ยังไม่ commit** — ต้อง `git add -A && git commit && git push` แล้วรัน `update.sh` บน VM เพื่อให้ cron/scheduler ทำงาน
 

@@ -5,16 +5,16 @@ namespace App\Services;
 use App\Models\NotificationSetting;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 /**
- * Sends alerts to the configured channels (Discord / Telegram / LINE / generic
- * webhook / email). Every send is best-effort: failures are logged, never
- * thrown, so notifications can never break the request that triggered them.
+ * Sends alerts through the LINE Messaging API — the panel's notification
+ * channel (scope 1.3.3.1). Every send is best-effort: failures are logged,
+ * never thrown, so notifications can never break the request that triggered
+ * them.
  */
 class NotificationService
 {
-    public const CHANNELS = ['discord', 'telegram', 'line', 'webhook', 'email'];
+    public const CHANNELS = ['line'];
 
     /**
      * Fan a message out to all enabled channels.
@@ -39,59 +39,14 @@ class NotificationService
     {
         try {
             return match ($channel) {
-                'discord'  => self::discord($title, $message, $level),
-                'telegram' => self::telegram($title, $message),
-                'line'     => self::line($title, $message),
-                'webhook'  => self::webhook($title, $message, $level),
-                'email'    => self::email($title, $message),
-                default    => 'unknown channel',
+                'line'  => self::line($title, $message),
+                default => 'unknown channel',
             };
         } catch (\Throwable $e) {
             Log::warning("Notification [{$channel}] failed: " . $e->getMessage());
 
             return $e->getMessage();
         }
-    }
-
-    private static function discord(string $title, string $message, string $level): string
-    {
-        $url = (string) NotificationSetting::get('discord_webhook');
-        if ($url === '') {
-            return 'Discord webhook URL is not set';
-        }
-        $color = match ($level) {
-            'danger', 'error' => 0xEF4444,
-            'warning'         => 0xF59E0B,
-            default           => 0x10B981,
-        };
-        $res = Http::timeout(8)->post($url, [
-            'username' => 'NexPanel',
-            'embeds'   => [[
-                'title'       => $title,
-                'description' => $message,
-                'color'       => $color,
-                'footer'      => ['text' => 'NexPanel • ' . gethostname()],
-                'timestamp'   => now()->toIso8601String(),
-            ]],
-        ]);
-
-        return $res->successful() ? 'ok' : "HTTP {$res->status()}: {$res->body()}";
-    }
-
-    private static function telegram(string $title, string $message): string
-    {
-        $token = (string) NotificationSetting::get('telegram_token');
-        $chat  = (string) NotificationSetting::get('telegram_chat');
-        if ($token === '' || $chat === '') {
-            return 'Telegram bot token / chat id is not set';
-        }
-        $res = Http::timeout(8)->post("https://api.telegram.org/bot{$token}/sendMessage", [
-            'chat_id'    => $chat,
-            'text'       => "*{$title}*\n{$message}",
-            'parse_mode' => 'Markdown',
-        ]);
-
-        return $res->successful() ? 'ok' : "HTTP {$res->status()}: {$res->body()}";
     }
 
     /**
@@ -117,36 +72,5 @@ class NotificationService
             ]);
 
         return $res->successful() ? 'ok' : "HTTP {$res->status()}: {$res->body()}";
-    }
-
-    private static function webhook(string $title, string $message, string $level): string
-    {
-        $url = (string) NotificationSetting::get('webhook_url');
-        if ($url === '') {
-            return 'Webhook URL is not set';
-        }
-        $res = Http::timeout(8)->post($url, [
-            'source'    => 'nexpanel',
-            'host'      => gethostname(),
-            'title'     => $title,
-            'message'   => $message,
-            'level'     => $level,
-            'timestamp' => now()->toIso8601String(),
-        ]);
-
-        return $res->successful() ? 'ok' : "HTTP {$res->status()}: {$res->body()}";
-    }
-
-    private static function email(string $title, string $message): string
-    {
-        $to = (string) NotificationSetting::get('email_to');
-        if ($to === '') {
-            return 'Recipient email is not set';
-        }
-        Mail::raw($message, function ($mail) use ($to, $title) {
-            $mail->to($to)->subject("[NexPanel] {$title}");
-        });
-
-        return 'ok';
     }
 }
