@@ -234,36 +234,49 @@
                             </div>
 
                             <div class="p-5">
+                                {{-- Before starting: friendly list of what's new --}}
                                 <template x-if="!started">
                                     <div>
                                         <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">
-                                            เวอร์ชันปัจจุบัน <code class="text-cyan-500" x-text="current"></code>
-                                            → ล่าสุด <code class="text-cyan-500" x-text="latest"></code>
-                                            (<span x-text="behind"></span> การเปลี่ยนแปลง)
+                                            มีการอัปเดต <span class="font-semibold text-slate-700 dark:text-slate-200" x-text="behind"></span> รายการ
                                         </p>
-                                        <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">สิ่งที่จะอัปเดต</p>
-                                        <div class="max-h-52 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700/60">
-                                            <template x-for="c in commits" :key="c.hash">
-                                                <div class="flex items-start gap-2 p-2.5 text-xs">
-                                                    <code class="text-cyan-500 shrink-0" x-text="c.hash"></code>
-                                                    <span class="text-slate-600 dark:text-slate-300" x-text="c.subject"></span>
+                                        <div class="space-y-2">
+                                            <template x-for="c in changes" :key="c.label">
+                                                <div class="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 text-sm">
+                                                    <span class="text-lg leading-none" x-text="c.icon"></span>
+                                                    <span class="text-slate-700 dark:text-slate-200" x-text="c.label"></span>
                                                 </div>
                                             </template>
                                         </div>
                                     </div>
                                 </template>
+
+                                {{-- While updating: spinner + progress ring, no technical log --}}
                                 <template x-if="started">
-                                    <pre class="max-h-72 overflow-auto rounded-xl bg-slate-900 text-slate-100 text-[11px] leading-relaxed p-3 whitespace-pre-wrap" x-text="log"></pre>
+                                    <div class="py-6 flex flex-col items-center text-center">
+                                        <div class="relative w-24 h-24 mb-4">
+                                            <svg class="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
+                                                <circle cx="50" cy="50" r="44" fill="none" stroke-width="8" class="stroke-slate-100 dark:stroke-white/10"/>
+                                                <circle cx="50" cy="50" r="44" fill="none" stroke-width="8" stroke-linecap="round"
+                                                        class="stroke-cyan-500 transition-all duration-700"
+                                                        stroke-dasharray="276" :stroke-dashoffset="276 - (276 * percent / 100)"/>
+                                            </svg>
+                                            <div class="absolute inset-0 flex items-center justify-center">
+                                                <svg x-show="running" class="w-6 h-6 text-cyan-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                                                <span x-show="done && success" class="text-3xl">✅</span>
+                                                <span x-show="done && !success" class="text-3xl">❌</span>
+                                            </div>
+                                        </div>
+                                        <div class="text-2xl font-extrabold text-slate-800 dark:text-white mb-1" x-text="percent + '%'"></div>
+                                        <p class="text-sm font-medium text-slate-600 dark:text-slate-300" x-text="stageLabel"></p>
+                                        <p x-show="running" class="text-xs text-slate-400 mt-2">อย่าปิดหน้านี้จนกว่าจะเสร็จ</p>
+                                        <button x-show="done && !success" @click="showLog = !showLog" class="mt-3 text-xs text-cyan-500 hover:underline">ดูรายละเอียด</button>
+                                        <pre x-show="done && !success && showLog" x-cloak class="mt-2 max-h-40 w-full overflow-auto rounded-xl bg-slate-900 text-slate-100 text-[11px] leading-relaxed p-3 whitespace-pre-wrap text-left" x-text="log"></pre>
+                                    </div>
                                 </template>
                             </div>
 
                             <div class="flex items-center justify-end gap-3 p-4 border-t border-slate-200 dark:border-slate-700">
-                                <span x-show="running" class="mr-auto text-xs text-amber-500 flex items-center gap-2">
-                                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                                    กำลังอัปเดต… อย่าปิดหน้านี้
-                                </span>
-                                <span x-show="done && success" class="mr-auto text-xs text-emerald-500">✅ อัปเดตเสร็จ กำลังรีโหลด…</span>
-                                <span x-show="done && !success" class="mr-auto text-xs text-red-500">❌ อัปเดตล้มเหลว — ดู log ด้านบน</span>
                                 <button x-show="!running" @click="open = false" class="px-4 py-2 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 dark:hover:bg-white/10">ปิด</button>
                                 <button x-show="!started" @click="start()" class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white text-sm font-semibold shadow-lg shadow-cyan-500/25">อัปเดตเลย</button>
                             </div>
@@ -299,42 +312,64 @@
 <script>
     function updateWidget() {
         const csrf = document.querySelector('meta[name="csrf-token"]').content;
+        // Map update.sh stage markers → friendly Thai label + progress %.
+        const STAGES = [
+            { m: 'Pulling latest code',          label: 'กำลังดึงโค้ดใหม่…',   pct: 20 },
+            { m: 'Updating PHP dependencies',    label: 'อัปเดตไลบรารี…',      pct: 45 },
+            { m: 'Running database migrations',  label: 'อัปเดตฐานข้อมูล…',    pct: 65 },
+            { m: 'Rebuilding caches',            label: 'สร้างแคชใหม่…',       pct: 82 },
+            { m: 'Reloading services',           label: 'รีโหลดบริการ…',       pct: 95 },
+        ];
         return {
-            available: false, current: '', latest: '', behind: 0, commits: [],
-            open: false, started: false, running: false, done: false, success: false, log: '',
+            available: false, current: '', latest: '', behind: 0, changes: [],
+            open: false, started: false, running: false, done: false, success: false,
+            log: '', showLog: false, percent: 0, stageLabel: '',
             async check() {
                 try {
                     const r = await fetch('/api/update/check');
                     const d = await r.json();
                     this.available = d.updateAvailable;
                     this.current = d.current; this.latest = d.latest;
-                    this.behind = d.behind; this.commits = d.commits || [];
+                    this.behind = d.behind; this.changes = d.changes || [];
                 } catch (e) { /* offline / no git — hide the widget */ }
             },
             async start() {
-                this.started = true; this.running = true; this.log = 'กำลังเริ่มอัปเดต…';
+                this.started = true; this.running = true;
+                this.percent = 8; this.stageLabel = 'กำลังเริ่มอัปเดต…';
                 try {
                     const r = await fetch('/api/update/run', {
                         method: 'POST',
                         headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
                     });
                     const d = await r.json();
-                    if (!d.ok) { this.running = false; this.log = d.message || 'เริ่มไม่สำเร็จ'; return; }
+                    if (!d.ok) { this.running = false; this.done = true; this.success = false; this.stageLabel = 'เริ่มไม่สำเร็จ'; this.log = d.message || ''; return; }
                     this.poll();
-                } catch (e) { this.running = false; this.log = 'เริ่มไม่สำเร็จ: ' + e.message; }
+                } catch (e) { this.running = false; this.done = true; this.success = false; this.stageLabel = 'เริ่มไม่สำเร็จ'; this.log = e.message; }
             },
             async poll() {
                 try {
                     const r = await fetch('/api/update/status');
                     const d = await r.json();
-                    if (d.log) this.log = d.log;
+                    if (d.log) { this.log = d.log; this.applyStage(d.log); }
                     if (d.done) {
                         this.running = false; this.done = true; this.success = d.success;
+                        this.percent = d.success ? 100 : this.percent;
+                        this.stageLabel = d.success ? 'อัปเดตเสร็จสมบูรณ์ 🎉' : 'อัปเดตล้มเหลว';
                         if (d.success) setTimeout(() => location.reload(), 2500);
                         return;
                     }
                 } catch (e) { /* php-fpm reload mid-update drops a poll — keep trying */ }
                 setTimeout(() => this.poll(), 2000);
+            },
+            applyStage(log) {
+                // Pick the furthest stage whose marker has appeared in the log.
+                for (let i = STAGES.length - 1; i >= 0; i--) {
+                    if (log.includes(STAGES[i].m)) {
+                        if (STAGES[i].pct > this.percent) this.percent = STAGES[i].pct;
+                        this.stageLabel = STAGES[i].label;
+                        return;
+                    }
+                }
             },
         };
     }

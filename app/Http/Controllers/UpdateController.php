@@ -54,15 +54,13 @@ class UpdateController extends Controller
         $behind   = (int) trim($this->git('rev-list --count HEAD..origin/main')->output());
         $fetchErr = trim($this->git('rev-parse --abbrev-ref origin/HEAD')->errorOutput());
 
-        $commits = [];
+        $subjects = [];
         if ($behind > 0) {
-            $raw = $this->git('log --pretty=format:%h%x1f%s HEAD..origin/main -n 30')->output();
+            $raw = $this->git('log --pretty=format:%s HEAD..origin/main -n 50')->output();
             foreach (explode("\n", trim($raw)) as $line) {
-                if ($line === '') {
-                    continue;
+                if (trim($line) !== '') {
+                    $subjects[] = $line;
                 }
-                [$hash, $subject] = array_pad(explode("\x1f", $line, 2), 2, '');
-                $commits[] = ['hash' => $hash, 'subject' => $subject];
             }
         }
 
@@ -71,9 +69,48 @@ class UpdateController extends Controller
             'current'         => $current ?: 'unknown',
             'latest'          => $latest ?: 'unknown',
             'behind'          => $behind,
-            'commits'         => $commits,
+            'changes'         => $this->friendlyChanges($subjects),
             'gitError'        => $current === '' ? $fetchErr : null,
         ]);
+    }
+
+    /**
+     * Turn raw commit subjects into a short, deduped list of user-friendly
+     * Thai categories, so the UI shows "แก้ไขบั๊ก" instead of git messages.
+     *
+     * @param  array<int,string>  $subjects
+     * @return array<int,array{icon:string,label:string}>
+     */
+    private function friendlyChanges(array $subjects): array
+    {
+        // Ordered: the first matching rule wins for each commit.
+        $rules = [
+            ['/theme|dark|flash|knob|toggle|fout/i', '🎨', 'ปรับปรุงธีมและการแสดงผล'],
+            ['/menu|layout|sidebar|\bui\b|ux|design|style/i', '🎨', 'ปรับปรุงหน้าตา (UI)'],
+            ['/notif|line|alert|monitor|threshold/i', '🔔', 'ระบบแจ้งเตือน'],
+            ['/network|metric|dashboard|chart|graph/i', '📊', 'แดชบอร์ดและการมอนิเตอร์'],
+            ['/security|firewall|ufw/i', '🔒', 'ความปลอดภัย'],
+            ['/ssl|cert|certbot/i', '🔐', 'ใบรับรอง SSL'],
+            ['/database|sql|mysql|backup/i', '🗄️', 'ฐานข้อมูล'],
+            ['/updater|update|schedule|cron/i', '⬆️', 'ปรับปรุงระบบอัปเดต/ตารางงาน'],
+            ['/fix|bug|patch/i', '🐛', 'แก้ไขบั๊ก'],
+            ['/add|feat|new|support/i', '✨', 'ฟีเจอร์ใหม่'],
+        ];
+
+        $changes = [];
+        foreach ($subjects as $subject) {
+            $matched = null;
+            foreach ($rules as [$pattern, $icon, $label]) {
+                if (preg_match($pattern, $subject)) {
+                    $matched = ['icon' => $icon, 'label' => $label];
+                    break;
+                }
+            }
+            $matched ??= ['icon' => '🔧', 'label' => 'ปรับปรุงทั่วไป'];
+            $changes[$matched['label']] = $matched; // dedupe by label
+        }
+
+        return array_values($changes);
     }
 
     /** Kick off update.sh in the background. Returns immediately. */
