@@ -14,8 +14,13 @@ class NotificationController extends Controller
     private const KEYS = [
         'discord_enabled', 'discord_webhook',
         'telegram_enabled', 'telegram_token', 'telegram_chat',
+        'line_enabled', 'line_token', 'line_to',
         'webhook_enabled', 'webhook_url',
         'email_enabled', 'email_to',
+        // Monitoring & alert thresholds
+        'monitor_enabled', 'monitor_cpu', 'monitor_ram', 'monitor_disk',
+        'monitor_cooldown', 'monitor_ssl_days',
+        'monitor_services_enabled', 'monitor_ssl_enabled', 'monitor_cron_enabled',
     ];
 
     public function index()
@@ -42,7 +47,7 @@ class NotificationController extends Controller
     public function test(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'channel' => 'required|in:discord,telegram,webhook,email',
+            'channel' => 'required|in:discord,telegram,line,webhook,email',
         ]);
 
         // Persist current form values first so the test uses what the user typed.

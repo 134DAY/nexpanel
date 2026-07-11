@@ -8,13 +8,13 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 /**
- * Sends alerts to the configured channels (Discord / Telegram / generic
+ * Sends alerts to the configured channels (Discord / Telegram / LINE / generic
  * webhook / email). Every send is best-effort: failures are logged, never
  * thrown, so notifications can never break the request that triggered them.
  */
 class NotificationService
 {
-    public const CHANNELS = ['discord', 'telegram', 'webhook', 'email'];
+    public const CHANNELS = ['discord', 'telegram', 'line', 'webhook', 'email'];
 
     /**
      * Fan a message out to all enabled channels.
@@ -41,6 +41,7 @@ class NotificationService
             return match ($channel) {
                 'discord'  => self::discord($title, $message, $level),
                 'telegram' => self::telegram($title, $message),
+                'line'     => self::line($title, $message),
                 'webhook'  => self::webhook($title, $message, $level),
                 'email'    => self::email($title, $message),
                 default    => 'unknown channel',
@@ -89,6 +90,31 @@ class NotificationService
             'text'       => "*{$title}*\n{$message}",
             'parse_mode' => 'Markdown',
         ]);
+
+        return $res->successful() ? 'ok' : "HTTP {$res->status()}: {$res->body()}";
+    }
+
+    /**
+     * LINE Messaging API (push message). Replaces the retired LINE Notify
+     * service. Requires a Messaging API channel access token and a recipient
+     * id (userId / groupId / roomId that has added the bot as a friend).
+     */
+    private static function line(string $title, string $message): string
+    {
+        $token = (string) NotificationSetting::get('line_token');
+        $to    = (string) NotificationSetting::get('line_to');
+        if ($token === '' || $to === '') {
+            return 'LINE channel access token / recipient id is not set';
+        }
+        $res = Http::timeout(8)
+            ->withToken($token)
+            ->post('https://api.line.me/v2/bot/message/push', [
+                'to'       => $to,
+                'messages' => [[
+                    'type' => 'text',
+                    'text' => "{$title}\n{$message}",
+                ]],
+            ]);
 
         return $res->successful() ? 'ok' : "HTTP {$res->status()}: {$res->body()}";
     }

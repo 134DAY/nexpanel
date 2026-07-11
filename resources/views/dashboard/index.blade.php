@@ -14,7 +14,7 @@
     </div>
 
     {{-- Stats Grid --}}
-    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-6">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5 mb-6">
 
         {{-- CPU --}}
         <div class="group bg-white dark:bg-surface-800/50 border border-slate-200 dark:border-slate-800/60 rounded-2xl p-5 hover:border-blue-300 dark:hover:border-blue-500/30 transition-all duration-300 stat-glow-blue">
@@ -60,6 +60,27 @@
             </div>
         </div>
 
+        {{-- Network --}}
+        <div class="group bg-white dark:bg-surface-800/50 border border-slate-200 dark:border-slate-800/60 rounded-2xl p-5 hover:border-cyan-300 dark:hover:border-cyan-500/30 transition-all duration-300">
+            <div class="flex items-center justify-between mb-4">
+                <span class="text-sm text-slate-500 dark:text-slate-400 font-medium">Network</span>
+                <div class="w-10 h-10 rounded-xl bg-cyan-50 dark:bg-cyan-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <svg class="w-5 h-5 text-cyan-500" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z"/></svg>
+                </div>
+            </div>
+            <div class="flex items-baseline gap-2 mb-1">
+                <span class="text-cyan-500 text-xs font-bold">↓</span>
+                <span class="text-lg font-extrabold text-slate-800 dark:text-white" id="net-rx">--</span>
+                <span class="text-[10px] text-slate-400">KB/s</span>
+            </div>
+            <div class="flex items-baseline gap-2">
+                <span class="text-emerald-500 text-xs font-bold">↑</span>
+                <span class="text-lg font-extrabold text-slate-800 dark:text-white" id="net-tx">--</span>
+                <span class="text-[10px] text-slate-400">KB/s</span>
+            </div>
+            <div class="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5" id="net-total">-- / -- MB total</div>
+        </div>
+
         {{-- Uptime --}}
         <div class="group bg-white dark:bg-surface-800/50 border border-slate-200 dark:border-slate-800/60 rounded-2xl p-5 hover:border-emerald-300 dark:hover:border-emerald-500/30 transition-all duration-300 stat-glow-emerald">
             <div class="flex items-center justify-between mb-4">
@@ -81,7 +102,7 @@
             <div class="flex items-center justify-between mb-5">
                 <div>
                     <h3 class="text-sm font-bold text-slate-800 dark:text-white">Resource Monitor</h3>
-                    <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Real-time CPU & RAM usage</p>
+                    <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Real-time CPU, RAM &amp; Network</p>
                 </div>
                 <span class="px-2.5 py-1 text-[10px] font-medium rounded-full bg-slate-100 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400">Live</span>
             </div>
@@ -150,21 +171,24 @@
         const labels = Array(maxPoints).fill('');
         const cpuData = Array(maxPoints).fill(null);
         const ramData = Array(maxPoints).fill(null);
+        const netData = Array(maxPoints).fill(null); // combined rx+tx KB/s
 
         const chart = new Chart(ctx, {
             type: 'line',
             data: {
                 labels,
                 datasets: [
-                    { label: 'CPU %', data: cpuData, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', borderWidth: 2.5, pointRadius: 0, tension: 0.4, fill: true },
-                    { label: 'RAM %', data: ramData, borderColor: '#a855f7', backgroundColor: 'rgba(168,85,247,0.1)', borderWidth: 2.5, pointRadius: 0, tension: 0.4, fill: true }
+                    { label: 'CPU %', data: cpuData, yAxisID: 'y', borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', borderWidth: 2.5, pointRadius: 0, tension: 0.4, fill: true },
+                    { label: 'RAM %', data: ramData, yAxisID: 'y', borderColor: '#a855f7', backgroundColor: 'rgba(168,85,247,0.1)', borderWidth: 2.5, pointRadius: 0, tension: 0.4, fill: true },
+                    { label: 'Net KB/s', data: netData, yAxisID: 'yNet', borderColor: '#06b6d4', backgroundColor: 'rgba(6,182,212,0.08)', borderWidth: 2, borderDash: [4, 3], pointRadius: 0, tension: 0.4, fill: false }
                 ]
             },
             options: {
                 responsive: true, maintainAspectRatio: true, animation: { duration: 400, easing: 'easeOutQuart' },
                 scales: {
                     x: { display: false },
-                    y: { min: 0, max: 100, grid: { color: gridColor() }, ticks: { color: tickColor(), callback: v => v + '%', font: { size: 11 } } }
+                    y: { position: 'left', min: 0, max: 100, grid: { color: gridColor() }, ticks: { color: tickColor(), callback: v => v + '%', font: { size: 11 } } },
+                    yNet: { position: 'right', min: 0, grid: { drawOnChartArea: false }, ticks: { color: tickColor(), callback: v => v + ' KB/s', font: { size: 10 } } }
                 },
                 plugins: { legend: { labels: { color: legendColor(), boxWidth: 12, font: { size: 11 }, usePointStyle: true, pointStyle: 'circle' } } }
             }
@@ -174,6 +198,7 @@
         new MutationObserver(() => {
             chart.options.scales.y.grid.color = gridColor();
             chart.options.scales.y.ticks.color = tickColor();
+            chart.options.scales.yNet.ticks.color = tickColor();
             chart.options.plugins.legend.labels.color = legendColor();
             chart.update('none');
         }).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
@@ -192,6 +217,15 @@
                 document.getElementById('disk-bar').style.width = d.disk.percent + '%';
                 document.getElementById('uptime-value').textContent = d.uptime;
                 document.getElementById('server-info').textContent = d.hostname + ' · ' + d.os;
+
+                if (d.network) {
+                    document.getElementById('net-rx').textContent = d.network.rx;
+                    document.getElementById('net-tx').textContent = d.network.tx;
+                    document.getElementById('net-total').textContent = d.network.total_rx_mb + ' / ' + d.network.total_tx_mb + ' MB total';
+                    netData.push(parseFloat(d.network.rx) + parseFloat(d.network.tx));
+                    netData.shift();
+                }
+
                 cpuData.push(parseFloat(d.cpu)); ramData.push(parseFloat(d.ram.percent));
                 cpuData.shift(); ramData.shift(); chart.update();
 

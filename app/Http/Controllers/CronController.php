@@ -109,7 +109,10 @@ class CronController extends Controller
         $result = Process::timeout(30)->run(['bash', '-lc', $job['command']]);
         $output = trim($result->output() . "\n" . $result->errorOutput());
         $this->appendCronLog($job['command'], $output, $result->exitCode());
-        ActivityLogger::log('cron.run', "Ran cron job now: {$job['command']}");
+        // Record failures at danger level so the monitor can alert on them.
+        $result->successful()
+            ? ActivityLogger::log('cron.run', "Ran cron job now: {$job['command']}")
+            : ActivityLogger::danger('cron.fail', "Cron job failed (exit {$result->exitCode()}): {$job['command']}");
 
         return response()->json([
             'ok'       => true,

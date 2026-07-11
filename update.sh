@@ -41,6 +41,16 @@ asuser php artisan config:cache
 asuser php artisan route:cache
 asuser php artisan view:cache
 
+log "Ensuring scheduler cron is installed"
+if [ ! -f /etc/cron.d/nexpanel ]; then
+    cat > /etc/cron.d/nexpanel <<CRON
+# NexPanel — run the Laravel scheduler every minute (monitoring & alerts)
+* * * * * ${APP_USER} cd ${APP_DIR} && php artisan schedule:run >> ${APP_DIR}/storage/logs/schedule.log 2>&1
+CRON
+    chmod 0644 /etc/cron.d/nexpanel
+    systemctl restart cron 2>/dev/null || true
+fi
+
 log "Reloading services"
 FPM="$(systemctl list-units --type=service --no-legend | grep -oE 'php[0-9.]+-fpm' | head -1)"
 systemctl reload "$FPM" 2>/dev/null || systemctl restart "$FPM" 2>/dev/null || true

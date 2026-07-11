@@ -12,6 +12,7 @@ class ServerMetricsService
             'cpu'      => $this->getCpuUsage(),
             'ram'      => $this->getMemoryUsage(),
             'disk'     => $this->getDiskUsage(),
+            'network'  => $this->getNetworkUsage(),
             'uptime'   => $this->getUptime(),
             'hostname' => trim(Process::run('hostname')->output()),
             'os'       => trim(Process::run('lsb_release -ds 2>/dev/null || cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d \'"\' | head -1')->output()) ?: 'Linux',
@@ -56,6 +57,50 @@ class ServerMetricsService
             'used' => round(((int)($parts[2] ?? 0)) / (1024**3), 1),
             'percent' => (float) trim($parts[4] ?? '0%', '%'),
         ];
+    }
+
+    /**
+     * Network throughput in KB/s, sampled over ~500ms across every physical
+     * interface (loopback and virtual bridges excluded). Returns download (rx)
+     * and upload (tx) rates plus cumulative totals in MB.
+     */
+    public function getNetworkUsage(): array
+    {
+        $s1 = $this->readNetDev();
+        usleep(500000);
+        $s2 = $this->readNetDev();
+
+        $rxRate = max(0, $s2['rx'] - $s1['rx']) * 2; // *2 → per-second (0.5s window)
+        $txRate = max(0, $s2['tx'] - $s1['tx']) * 2;
+
+        return [
+            'rx'          => round($rxRate / 1024, 1),          // KB/s down
+            'tx'          => round($txRate / 1024, 1),          // KB/s up
+            'total_rx_mb' => round($s2['rx'] / (1024 ** 2), 1), // MB received since boot
+            'total_tx_mb' => round($s2['tx'] / (1024 ** 2), 1), // MB sent since boot
+        ];
+    }
+
+    /** Sum rx/tx bytes across real interfaces (skip lo, docker, veth, br-). */
+    private function readNetDev(): array
+    {
+        $rx = 0;
+        $tx = 0;
+        foreach (explode("\n", (string) @file_get_contents('/proc/net/dev')) as $line) {
+            if (! str_contains($line, ':')) {
+                continue;
+            }
+            [$iface, $data] = explode(':', $line, 2);
+            $iface = trim($iface);
+            if ($iface === 'lo' || str_starts_with($iface, 'docker') || str_starts_with($iface, 'veth') || str_starts_with($iface, 'br-')) {
+                continue;
+            }
+            $cols = preg_split('/\s+/', trim($data));
+            $rx += (int) ($cols[0] ?? 0);  // bytes received
+            $tx += (int) ($cols[8] ?? 0);  // bytes transmitted
+        }
+
+        return ['rx' => $rx, 'tx' => $tx];
     }
 
     public function getUptime(): string

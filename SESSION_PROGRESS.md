@@ -1,6 +1,6 @@
 # NexPanel — Session Progress
 
-**อัปเดตล่าสุด:** 2026-07-09 · commit `dc0ad56` (29 commits) · repo: github.com/134DAY/nexpanel
+**อัปเดตล่าสุด:** 2026-07-10 · commit `d07cf00` (34 commits) · repo: github.com/134DAY/nexpanel
 
 โน้ตสำหรับทำงานต่อ — สรุปว่าทำถึงไหน + วิธี resume
 
@@ -27,7 +27,9 @@ cd /var/www/nexpanel && sudo bash update.sh
 ## ✅ เสร็จแล้ว (Phase 1-4 + aaPanel features)
 
 ### Core
-- Dashboard (metric สด), Service Control (systemctl จริง), Settings, Notifications (Discord/Telegram/webhook/email), Auth
+- Dashboard (metric สด + **Network rx/tx** + กราฟ CPU/RAM/Network), Service Control (systemctl จริง), Settings, Auth
+- Notifications (Discord/Telegram/**LINE Messaging API**/webhook/email)
+- **Monitoring & Alerts** — threshold CPU/RAM/Disk + service down + SSL ใกล้หมด + cron fail (command `nexpanel:monitor` ทุก 1 นาที ผ่าน scheduler)
 - Cron, Web Terminal (cd persist), SSL (certbot), Website/Nginx
 
 ### AI Assistant (สั่งงานแทนได้ — ยืนยันก่อนรัน)
@@ -48,6 +50,22 @@ cd /var/www/nexpanel && sudo bash update.sh
 - **Right-click context menu**: Edit/Download/Extract/chmod/Copy/Cut/Copy Path/Compress/Rename/Delete/Properties
 - Copy/Cut/Paste (clipboard), chmod modal (ติ๊ก rwx), zip/unzip
 - **ทุก op fallback เป็น root** เมื่อ www-data โดน denied → จัดการไฟล์ root-owned ได้ (ไม่มี Permission denied)
+- **CodeMirror online editor** — แก้ไฟล์ text ในเบราว์เซอร์ (syntax highlight, aaPanel-style)
+- **Toolbar aaPanel-style** ทั้งหน้า Databases และ File Manager
+
+### Logs (aaPanel-style) — ใหม่
+- หน้า Logs รวม: operation log, run log, cron log
+
+### Security (ufw) — ใหม่
+- **Firewall tab** — เปิด/ปิดพอร์ต + rule ตาม IP ผ่าน ufw
+
+### Monitoring + Network + LINE — ใหม่ล่าสุด (ปิดสโคป 1.3.2.1 / 1.3.2.2 / 1.3.3.2)
+- **Network metric**: `ServerMetricsService::getNetworkUsage()` อ่าน `/proc/net/dev` (rx/tx KB/s + total MB), การ์ด Network + เส้นในกราฟ dashboard (secondary axis)
+- **Threshold + auto-alert**: `app/Console/Commands/MonitorServer.php` (`nexpanel:monitor`) — เช็ค CPU/RAM/Disk เกินเกณฑ์, service ล่ม, SSL ใกล้หมด, cron fail; state machine (alert ครั้งเดียว + cooldown + resolved)
+- **Scheduler**: `bootstrap/app.php` → `withSchedule` รัน monitor ทุกนาที; cron `/etc/cron.d/nexpanel` ตั้งใน install.sh + update.sh (`schedule:run`)
+- **LINE Messaging API**: channel `line` ใน NotificationService (push API) แทน LINE Notify ที่ปิดตัว; ตั้งค่า channel access token + recipient id ในหน้า Notifications
+- **UI**: การ์ด "Monitoring & Alerts" (threshold + toggle events) และการ์ด LINE ในหน้า Notifications
+- ⚠️ **ยังไม่ commit** — ต้อง `git add -A && git commit && git push` แล้วรัน `update.sh` บน VM เพื่อให้ cron/scheduler ทำงาน
 
 ---
 
@@ -59,7 +77,11 @@ cd /var/www/nexpanel && sudo bash update.sh
 2. **ทดสอบเว็บที่สร้าง** ต้องเพิ่ม hosts + ใช้ port :8080 (เพราะ VM + โดเมนปลอม เช่น `portfolio`, `test.example.com`)
    บน VPS จริง + โดเมนจริง = ชี้ DNS มาก็เข้าได้เลย
 
-3. **ยังไม่ได้ทำ (Phase 4 เดิม + idea):**
+3. **Threshold monitoring ต้องมี scheduler cron ทำงาน** — บน VM เก่าที่ install ก่อนหน้านี้ยังไม่มี `/etc/cron.d/nexpanel`; รัน `update.sh` (เพิ่ม logic ติดตั้ง cron ให้แล้ว) หรือทดสอบ manual: `php artisan nexpanel:monitor`
+
+4. **cron fail detection**: จับจาก activity_logs (CronController::run log danger เมื่อ exit≠0). system cron ที่ fail เองยังไม่ถูกจับ (log file ไม่เก็บ exit code) — ปิดสโคปแค่ manual-run path
+
+5. **ยังไม่ได้ทำ (idea):**
    - Auto-backup ตามเวลา (cron schedule)
    - One-line installer ทดสอบบน VPS จริง (ยังเทสแค่ VM)
 

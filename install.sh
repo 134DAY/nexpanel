@@ -287,6 +287,14 @@ NGINX
 ln -sf /etc/nginx/sites-available/nexpanel /etc/nginx/sites-enabled/nexpanel
 rm -f /etc/nginx/sites-enabled/default
 
+# ---- 7b. Laravel scheduler (drives resource monitoring / alerts) --------
+log "Installing scheduler cron (nexpanel:monitor every minute)"
+cat > /etc/cron.d/nexpanel <<CRON
+# NexPanel — run the Laravel scheduler every minute (monitoring & alerts)
+* * * * * ${APP_USER} cd ${APP_DIR} && php artisan schedule:run >> ${APP_DIR}/storage/logs/schedule.log 2>&1
+CRON
+chmod 0644 /etc/cron.d/nexpanel
+
 # ---- 8. start everything ------------------------------------------------
 log "Enabling and starting services"
 systemctl enable --now "php${PHP_VERSION}-fpm" nginx mysql cron >/dev/null 2>&1 || true
