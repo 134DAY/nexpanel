@@ -25,24 +25,38 @@ class UpdateController extends Controller
         return storage_path('logs/update-run.log');
     }
 
-    /** Compare HEAD with origin/main and list the pending commits. */
-    public function check(): JsonResponse
+    /**
+     * Run git in the app dir, immune to "dubious ownership" (repo owned by a
+     * different uid) and with a writable HOME so config lookups never fail.
+     */
+    private function git(string $args): \Illuminate\Contracts\Process\ProcessResult
     {
         $dir = base_path();
 
-        // Refresh remote refs at most once every 30 min to keep the request cheap.
+        return Process::path($dir)
+            ->env(['HOME' => storage_path('app'), 'GIT_TERMINAL_PROMPT' => '0'])
+            ->timeout(25)
+            ->run('git -c safe.directory=' . escapeshellarg($dir) . ' ' . $args);
+    }
+
+    /** Compare HEAD with origin/main and list the pending commits. */
+    public function check(): JsonResponse
+    {
+        // Refresh remote refs at most once a minute to keep the request cheap
+        // while still noticing a fresh push within ~a minute.
         if (! Cache::has('update_fetched')) {
-            Process::path($dir)->timeout(20)->run('git fetch --quiet origin');
-            Cache::put('update_fetched', true, now()->addMinutes(30));
+            $this->git('fetch --quiet origin');
+            Cache::put('update_fetched', true, now()->addSeconds(60));
         }
 
-        $current = trim(Process::path($dir)->run('git rev-parse --short HEAD')->output());
-        $latest  = trim(Process::path($dir)->run('git rev-parse --short origin/main')->output());
-        $behind  = (int) trim(Process::path($dir)->run('git rev-list --count HEAD..origin/main')->output());
+        $current  = trim($this->git('rev-parse --short HEAD')->output());
+        $latest   = trim($this->git('rev-parse --short origin/main')->output());
+        $behind   = (int) trim($this->git('rev-list --count HEAD..origin/main')->output());
+        $fetchErr = trim($this->git('rev-parse --abbrev-ref origin/HEAD')->errorOutput());
 
         $commits = [];
         if ($behind > 0) {
-            $raw = Process::path($dir)->run('git log --pretty=format:%h%x1f%s HEAD..origin/main -n 30')->output();
+            $raw = $this->git('log --pretty=format:%h%x1f%s HEAD..origin/main -n 30')->output();
             foreach (explode("\n", trim($raw)) as $line) {
                 if ($line === '') {
                     continue;
@@ -58,6 +72,7 @@ class UpdateController extends Controller
             'latest'          => $latest ?: 'unknown',
             'behind'          => $behind,
             'commits'         => $commits,
+            'gitError'        => $current === '' ? $fetchErr : null,
         ]);
     }
 
