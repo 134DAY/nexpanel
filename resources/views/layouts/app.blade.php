@@ -326,7 +326,7 @@
             log: '', showLog: false, percent: 0, stageLabel: '',
             async check() {
                 try {
-                    const r = await fetch('/api/update/check');
+                    const r = await fetch('/api/update/check?t=' + Date.now(), { cache: 'no-store' });
                     const d = await r.json();
                     this.available = d.updateAvailable;
                     this.current = d.current; this.latest = d.latest;
@@ -348,7 +348,7 @@
             },
             async poll() {
                 try {
-                    const r = await fetch('/api/update/status');
+                    const r = await fetch('/api/update/status?t=' + Date.now(), { cache: 'no-store' });
                     const d = await r.json();
                     if (d.log) { this.log = d.log; this.applyStage(d.log); }
                     if (d.done) {

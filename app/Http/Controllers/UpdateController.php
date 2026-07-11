@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Services\ActivityLogger;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Process;
 
 /**
@@ -42,17 +41,12 @@ class UpdateController extends Controller
     /** Compare HEAD with origin/main and list the pending commits. */
     public function check(): JsonResponse
     {
-        // Refresh remote refs at most once a minute to keep the request cheap
-        // while still noticing a fresh push within ~a minute.
-        if (! Cache::has('update_fetched')) {
-            $this->git('fetch --quiet origin');
-            Cache::put('update_fetched', true, now()->addSeconds(60));
-        }
-
+        // Always refresh remote refs so a fresh push is noticed immediately.
+        // (git fetch on a tiny repo is ~1s and this endpoint is polled async.)
+        $fetch    = $this->git('fetch --quiet origin');
         $current  = trim($this->git('rev-parse --short HEAD')->output());
         $latest   = trim($this->git('rev-parse --short origin/main')->output());
         $behind   = (int) trim($this->git('rev-list --count HEAD..origin/main')->output());
-        $fetchErr = trim($this->git('rev-parse --abbrev-ref origin/HEAD')->errorOutput());
 
         $subjects = [];
         if ($behind > 0) {
@@ -64,14 +58,15 @@ class UpdateController extends Controller
             }
         }
 
+        // no-store so the browser never serves a stale "no update" response.
         return response()->json([
             'updateAvailable' => $behind > 0,
             'current'         => $current ?: 'unknown',
             'latest'          => $latest ?: 'unknown',
             'behind'          => $behind,
             'changes'         => $this->friendlyChanges($subjects),
-            'gitError'        => $current === '' ? $fetchErr : null,
-        ]);
+            'gitError'        => $current === '' ? trim($fetch->errorOutput()) : null,
+        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
     }
 
     /**
