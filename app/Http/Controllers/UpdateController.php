@@ -119,7 +119,13 @@ class UpdateController extends Controller
             return response()->json(['ok' => false, 'message' => 'An update is already running.'], 409);
         }
 
-        @file_put_contents($log, "==> Starting NexPanel update…\n");
+        // The log dir may not exist on a fresh install — create it, otherwise
+        // every write below fails silently and the UI hangs with an empty log.
+        @mkdir(dirname($log), 0775, true);
+        @mkdir(storage_path('app'), 0775, true);
+        if (@file_put_contents($log, "==> Starting NexPanel update…\n") === false) {
+            return response()->json(['ok' => false, 'message' => 'Cannot write update log at ' . $log . ' (check storage permissions).'], 500);
+        }
 
         // A small script (world-readable, in writable storage) that the root
         // runner executes; keeps quoting sane and captures everything to the log.
@@ -127,6 +133,7 @@ class UpdateController extends Controller
         file_put_contents($script, implode("\n", [
             '#!/bin/bash',
             'LOG="' . $log . '"',
+            'mkdir -p "$(dirname "$LOG")"',
             'cd "' . $dir . '" || { echo "cd failed" >> "$LOG"; exit 1; }',
             'bash update.sh >> "$LOG" 2>&1',
             'echo "' . self::SENTINEL . ' exit=$?" >> "$LOG"',
