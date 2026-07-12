@@ -164,7 +164,7 @@ class DatabaseController extends Controller
             // Standalone user (Users tab).
             if ($request->filled('username') && ! $request->filled('name')) {
                 $data = $request->validate([
-                    'username' => 'required|string|max:32',
+                    'username' => ['required', 'string', 'max:32', 'regex:/^[A-Za-z0-9_]+$/'],
                     'password' => 'required|string|max:255',
                 ]);
                 $this->mysql->createUser($data['username'], $data['password']);
@@ -175,9 +175,10 @@ class DatabaseController extends Controller
 
             // Database + paired user (aaPanel-style).
             $data = $request->validate([
-                'name'     => 'required|string|max:64',
-                'charset'  => 'nullable|string|max:16',
-                'username' => 'nullable|string|max:32',
+                // Identifiers go into backtick-quoted SQL; allow only safe chars.
+                'name'     => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_]+$/'],
+                'charset'  => ['nullable', 'string', 'in:utf8,utf8mb3,utf8mb4,latin1,ascii,binary'],
+                'username' => ['nullable', 'string', 'max:32', 'regex:/^[A-Za-z0-9_]+$/'],
                 'password' => 'nullable|string|max:255',
             ]);
             $user = ($data['username'] ?? null) ?: $data['name'];

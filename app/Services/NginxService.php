@@ -59,6 +59,19 @@ class NginxService
     /** Create a vhost, enable it, reload nginx. Returns a status message. */
     public function createSite(string $domain, string $docRoot, string $phpVersion, bool $withSsl): string
     {
+        // Defense-in-depth: these values are written into the nginx config and
+        // used in root-level shell commands (chown), so reject anything that
+        // isn't a plain domain / a path under /var/www / an X.Y php version.
+        if (! preg_match('/^[a-zA-Z0-9.-]+$/', $domain)) {
+            throw new \RuntimeException('Invalid domain name.');
+        }
+        if (! preg_match('#^/var/www/[A-Za-z0-9._/-]+$#', $docRoot)) {
+            throw new \RuntimeException('Document root must be a safe path under /var/www.');
+        }
+        if (! preg_match('/^\d+\.\d+$/', $phpVersion)) {
+            throw new \RuntimeException('Invalid PHP version.');
+        }
+
         $name = basename($domain);
         $confPath = $this->available . '/' . $name;
         if (file_exists($confPath)) {

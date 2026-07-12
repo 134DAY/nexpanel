@@ -22,8 +22,17 @@ class FileManagerController extends Controller
     /** Directories skipped by default during a content search. */
     private const SEARCH_SKIP_DIRS = ['.git', 'node_modules', 'vendor', '.svn'];
 
-    /** Never delete these, trash or not. */
-    private const PROTECTED_PATHS = ['', '/', '/root', '/home', '/etc', '/var', '/usr', '/bin'];
+    /**
+     * System roots that must never be the target of a destructive/recursive
+     * operation (delete, recursive chmod). Sub-paths stay editable so the panel
+     * can still manage e.g. /etc/nginx, but the roots themselves are off-limits
+     * so a single call can't brick the box.
+     */
+    private const PROTECTED_PATHS = [
+        '', '/', '/root', '/home', '/etc', '/var', '/var/www', '/var/www/html',
+        '/usr', '/usr/local', '/usr/bin', '/bin', '/sbin', '/boot',
+        '/lib', '/lib64', '/opt', '/srv', '/run', '/sys', '/proc', '/dev',
+    ];
 
     public function index(Request $request)
     {
@@ -263,6 +272,9 @@ class FileManagerController extends Controller
         if (! file_exists($path)) {
             return response()->json(['error' => 'Source not found'], 404);
         }
+        if ($this->isProtected($path)) {
+            return response()->json(['error' => 'Refusing to rename a protected system path'], 403);
+        }
         if (file_exists($target)) {
             return response()->json(['error' => 'Target already exists'], 409);
         }
@@ -450,6 +462,10 @@ class FileManagerController extends Controller
         if (in_array($trimmed, self::PROTECTED_PATHS, true)) {
             return true;
         }
+        // Never let the panel wipe/chmod its own installation dir.
+        if ($trimmed !== '' && $trimmed === rtrim(base_path(), '/')) {
+            return true;
+        }
         // Any filesystem root (Linux "/" or a Windows drive root like "C:\") —
         // a root is its own parent. Never let one of these be deleted.
         $real = realpath($path);
@@ -511,8 +527,15 @@ class FileManagerController extends Controller
         if (! file_exists($path)) {
             return response()->json(['error' => 'Not found'], 404);
         }
+        // A recursive chmod on a system root (e.g. `/` or `/etc`) would brick the
+        // box, so refuse it outright.
+        if ($this->isProtected($path)) {
+            return response()->json(['error' => 'Refusing to chmod a protected system path'], 403);
+        }
         if (! @chmod($path, intval($request->input('mode'), 8))) {
-            if (! $this->runRoot('chmod -R ' . escapeshellarg($request->input('mode')) . ' ' . escapeshellarg($path))) {
+            // Only recurse into directories; a lone file never needs -R.
+            $recurse = is_dir($path) ? '-R ' : '';
+            if (! $this->runRoot('chmod ' . $recurse . escapeshellarg($request->input('mode')) . ' ' . escapeshellarg($path))) {
                 return response()->json(['error' => 'Permission denied'], 403);
             }
         }
@@ -546,6 +569,9 @@ class FileManagerController extends Controller
         }
 
         $isMove = $request->input('action') === 'move';
+        if ($isMove && $this->isProtected($src)) {
+            return response()->json(['error' => 'Refusing to move a protected system path'], 403);
+        }
         $ok = false;
         try {
             $ok = $isMove ? @rename($src, $target) : (function () use ($src, $target) {
@@ -648,9 +674,13 @@ class FileManagerController extends Controller
         }
         if (! $done) {
             $tarflag = str_ends_with($lower, '.tar') ? 'xf' : 'xzf';
+            // Root fallback hardening: never restore ownership/permissions from
+            // the archive (blocks setuid-root planting) and never let a member
+            // escape the target dir (blocks tar/zip-slip via absolute or ../ paths).
             $extract = $isZip
                 ? 'cd ' . escapeshellarg($dir) . ' && unzip -o ' . escapeshellarg($path)
-                : 'tar ' . $tarflag . ' ' . escapeshellarg($path) . ' -C ' . escapeshellarg($dir);
+                : 'tar --no-same-owner --no-same-permissions --no-absolute-names -C '
+                    . escapeshellarg($dir) . ' -' . $tarflag . ' ' . escapeshellarg($path);
             if (! $this->runRoot($extract . $this->chownWww($dir))) {
                 return response()->json(['error' => 'Extract failed (permission?)'], 403);
             }

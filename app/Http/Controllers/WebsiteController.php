@@ -35,8 +35,11 @@ class WebsiteController extends Controller
     {
         $data = $request->validate([
             'domain'        => 'required|string|regex:/^[a-zA-Z0-9.-]+$/|max:253',
-            'document_root' => 'nullable|string|max:512',
-            'php_version'   => 'nullable|string|max:8',
+            // Must live under /var/www with safe chars only — the doc root is
+            // both written into the nginx config and chown-ed as root, so an
+            // unconstrained value could inject config or brick the system.
+            'document_root' => ['nullable', 'string', 'max:512', 'regex:#^/var/www/[A-Za-z0-9._/-]+$#'],
+            'php_version'   => ['nullable', 'string', 'regex:/^\d+\.\d+$/'],
             'ssl'           => 'nullable',
         ]);
 

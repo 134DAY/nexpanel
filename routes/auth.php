@@ -12,10 +12,12 @@ use App\Http\Controllers\Auth\VerifyEmailController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
-    Route::get('register', [RegisteredUserController::class, 'create'])
-        ->name('register');
-
-    Route::post('register', [RegisteredUserController::class, 'store']);
+    // NOTE: public self-registration is intentionally disabled — a server panel
+    // must not let anyone create a root-capable account. The admin user is
+    // provisioned by the installer (install.sh) or `php artisan nexpanel:user`.
+    // Re-enabling these routes is a critical security risk.
+    // Route::get('register', [RegisteredUserController::class, 'create'])->name('register');
+    // Route::post('register', [RegisteredUserController::class, 'store']);
 
     Route::get('login', [AuthenticatedSessionController::class, 'create'])
         ->name('login');
