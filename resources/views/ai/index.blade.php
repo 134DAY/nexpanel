@@ -4,10 +4,10 @@
 @section('header', 'AI Assistant')
 
 @section('content')
-<div x-data="aiChat()" x-init="init()" class="flex h-[calc(100vh-8rem)] -m-6">
+<div x-data="aiChat()" x-init="init()" class="flex relative h-[calc(100vh-8rem)] -m-4 sm:-m-6">
 
     <!-- Chat History Sidebar -->
-    <div class="w-72 shrink-0 bg-slate-50 dark:bg-white/5 border-r border-slate-200 dark:border-white/10 flex flex-col"
+    <div class="w-72 shrink-0 bg-slate-50 dark:bg-white/5 border-r border-slate-200 dark:border-white/10 flex flex-col absolute inset-y-0 left-0 z-20 shadow-2xl md:static md:z-auto md:shadow-none"
          x-show="showHistory" x-transition>
 
         <!-- Sidebar Header -->
@@ -264,7 +264,7 @@ function aiChat() {
         currentSession: null,
         sessions: [],
         provider: '{{ $providerName ?? "" }}',
-        showHistory: true,
+        showHistory: window.innerWidth >= 768,
         autoStep: 0,
 
         async init() {

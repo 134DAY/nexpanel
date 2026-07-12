@@ -63,7 +63,7 @@
                     {{-- Provider Cards --}}
                     <div>
                         <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">Select Provider</label>
-                        <div class="grid grid-cols-4 gap-3">
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                             @php
                                 $providers = [
                                     'claude' => ['name' => 'Claude', 'sub' => 'Anthropic', 'color' => 'from-orange-400 to-orange-600', 'letter' => 'C'],

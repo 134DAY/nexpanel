@@ -7,7 +7,7 @@
 <div x-data="cronManager()" class="space-y-6">
 
     {{-- Stats --}}
-    <div class="grid grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div class="bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-slate-800/60 p-5">
             <p class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Total Jobs</p>
             <p class="text-2xl font-bold text-slate-800 dark:text-white mt-1">{{ $stats['total'] }}</p>
