@@ -332,7 +332,7 @@
         return {
             available: false, current: '', latest: '', behind: 0, changes: [],
             open: false, started: false, running: false, done: false, success: false,
-            log: '', showLog: false, percent: 0, stageLabel: '',
+            log: '', showLog: false, percent: 0, stageLabel: '', polls: 0,
             async check() {
                 try {
                     const r = await fetch('/api/update/check?t=' + Date.now(), { cache: 'no-store' });
@@ -343,7 +343,7 @@
                 } catch (e) { /* offline / no git — hide the widget */ }
             },
             async start() {
-                this.started = true; this.running = true;
+                this.started = true; this.running = true; this.polls = 0;
                 this.percent = 8; this.stageLabel = 'กำลังเริ่มอัปเดต…';
                 try {
                     const r = await fetch('/api/update/run', {
@@ -356,6 +356,7 @@
                 } catch (e) { this.running = false; this.done = true; this.success = false; this.stageLabel = 'เริ่มไม่สำเร็จ'; this.log = e.message; }
             },
             async poll() {
+                this.polls++;
                 try {
                     const r = await fetch('/api/update/status?t=' + Date.now(), { cache: 'no-store' });
                     const d = await r.json();
@@ -367,8 +368,23 @@
                         if (d.success) setTimeout(() => location.reload(), 2500);
                         return;
                     }
+                    // The runner never wrote a line → it failed to launch (no
+                    // systemd-run, permissions). Don't spin forever.
+                    if (!d.log && this.polls >= 15) {
+                        this.fail('อัปเดตไม่เริ่มทำงาน — รันด้วยมือ: cd /var/www/nexpanel && sudo bash update.sh');
+                        return;
+                    }
+                    // Overall safety net: give up after ~5 minutes.
+                    if (this.polls >= 150) {
+                        this.fail('อัปเดตใช้เวลานานผิดปกติ — เช็คด้วย SSH แล้วรัน update.sh เอง');
+                        return;
+                    }
                 } catch (e) { /* php-fpm reload mid-update drops a poll — keep trying */ }
                 setTimeout(() => this.poll(), 2000);
+            },
+            fail(msg) {
+                this.running = false; this.done = true; this.success = false;
+                this.stageLabel = 'อัปเดตล้มเหลว'; this.log = (this.log || '') + '\n' + msg; this.showLog = true;
             },
             applyStage(log) {
                 // Pick the furthest stage whose marker has appeared in the log.
