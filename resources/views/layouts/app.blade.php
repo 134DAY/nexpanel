@@ -58,12 +58,17 @@
     </style>
     @stack('styles')
 </head>
-<body class="h-full bg-slate-50 dark:bg-surface-950 text-slate-800 dark:text-slate-200 antialiased transition-colors duration-300">
+<body class="h-full overflow-x-hidden bg-slate-50 dark:bg-surface-950 text-slate-800 dark:text-slate-200 antialiased transition-colors duration-300">
 
-<div class="flex h-full">
+<div class="flex h-full" x-data="{ sidebarOpen: false }" @keydown.escape.window="sidebarOpen = false">
+
+    {{-- Mobile backdrop --}}
+    <div x-show="sidebarOpen" x-cloak @click="sidebarOpen = false" x-transition.opacity
+         class="fixed inset-0 z-30 bg-black/50 lg:hidden"></div>
 
     {{-- ===== SIDEBAR ===== --}}
-    <aside class="w-[260px] bg-white/80 dark:bg-surface-900/80 glass border-r border-slate-200 dark:border-slate-800/60 flex flex-col shrink-0">
+    <aside class="fixed inset-y-0 left-0 z-40 w-[260px] bg-white/95 dark:bg-surface-900/95 glass border-r border-slate-200 dark:border-slate-800/60 flex flex-col shrink-0 transform transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 lg:bg-white/80 lg:dark:bg-surface-900/80"
+           :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'">
 
         {{-- Logo --}}
         <div class="h-[72px] flex items-center px-5 border-b border-slate-200 dark:border-slate-800/60 gap-3">
@@ -197,15 +202,19 @@
     <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
 
         {{-- Topbar --}}
-        <header class="h-[72px] bg-white/60 dark:bg-surface-900/60 glass border-b border-slate-200 dark:border-slate-800/60 flex items-center justify-between px-6 shrink-0">
-            <div class="flex items-center gap-4">
-                <h1 class="text-xl font-bold text-slate-800 dark:text-white">@yield('title', 'Dashboard')</h1>
+        <header class="h-[72px] bg-white/60 dark:bg-surface-900/60 glass border-b border-slate-200 dark:border-slate-800/60 flex items-center justify-between px-4 sm:px-6 shrink-0">
+            <div class="flex items-center gap-2 sm:gap-4 min-w-0">
+                {{-- Hamburger (mobile only) --}}
+                <button @click="sidebarOpen = true" class="lg:hidden p-2 -ml-1 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 shrink-0" aria-label="Open menu">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg>
+                </button>
+                <h1 class="text-lg sm:text-xl font-bold text-slate-800 dark:text-white truncate">@yield('title', 'Dashboard')</h1>
                 @hasSection('subheader')
-                    <span class="text-sm text-slate-400 dark:text-slate-500">— @yield('subheader')</span>
+                    <span class="hidden md:inline text-sm text-slate-400 dark:text-slate-500">— @yield('subheader')</span>
                 @endif
             </div>
 
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2 sm:gap-4 shrink-0">
                 {{-- Update available --}}
                 <div x-data="updateWidget()" x-init="check(); setInterval(() => { if (!open) check() }, 900000)" x-cloak>
                     <button x-show="available" @click="open = true"
@@ -294,15 +303,15 @@
                 </button>
 
                 {{-- Server Status --}}
-                <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20">
+                <div class="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20">
                     <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span class="text-xs font-medium text-emerald-700 dark:text-emerald-400">Online</span>
+                    <span class="hidden sm:inline text-xs font-medium text-emerald-700 dark:text-emerald-400">Online</span>
                 </div>
             </div>
         </header>
 
         {{-- Page Content --}}
-        <main class="flex-1 overflow-y-auto p-6">
+        <main class="flex-1 overflow-y-auto p-4 sm:p-6">
             @yield('content')
         </main>
 
