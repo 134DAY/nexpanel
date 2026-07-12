@@ -4,7 +4,6 @@ use App\Http\Controllers\AIController;
 use App\Http\Controllers\CronController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DatabaseController;
-use App\Http\Controllers\DockerController;
 use App\Http\Controllers\FileManagerController;
 use App\Http\Controllers\LogController;
 use App\Http\Controllers\NotificationController;
@@ -17,7 +16,6 @@ use App\Http\Controllers\SSLController;
 use App\Http\Controllers\TerminalController;
 use App\Http\Controllers\UpdateController;
 use App\Http\Controllers\WebsiteController;
-use App\Http\Controllers\WordPressController;
 use Illuminate\Support\Facades\Route;
 
 // Redirect root to dashboard
@@ -111,18 +109,6 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/logs/cron', [LogController::class, 'cronList'])->name('logs.cron');
     Route::get('/logs/cron/{key}', [LogController::class, 'cronShow'])->name('logs.cron.show');
     Route::delete('/logs/cron/{key}', [LogController::class, 'clearCron'])->name('logs.cron.clear');
-
-    // Docker (Tools)
-    Route::get('/docker', [DockerController::class, 'index'])->name('docker.index');
-    Route::get('/docker/data', [DockerController::class, 'data'])->name('docker.data');
-    Route::post('/docker/action', [DockerController::class, 'action'])->name('docker.action');
-    Route::post('/docker/logs', [DockerController::class, 'logs'])->name('docker.logs');
-    Route::post('/docker/pull', [DockerController::class, 'pull'])->name('docker.pull');
-    Route::post('/docker/image/remove', [DockerController::class, 'removeImage'])->name('docker.image.remove');
-
-    // WordPress (Tools)
-    Route::get('/wordpress', [WordPressController::class, 'index'])->name('wordpress.index');
-    Route::post('/wordpress/install', [WordPressController::class, 'install'])->name('wordpress.install');
 
     // Web Terminal (Phase 3)
     Route::get('/terminal', [TerminalController::class, 'index'])->name('terminal.index');

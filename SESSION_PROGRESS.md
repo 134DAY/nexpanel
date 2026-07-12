@@ -59,11 +59,6 @@ cd /var/www/nexpanel && sudo bash update.sh
 ### Security (ufw) — ใหม่
 - **Firewall tab** — เปิด/ปิดพอร์ต + rule ตาม IP ผ่าน ufw
 
-### 🐳📝 เมนูใหม่ Docker + WordPress (commit 3541433) — เทส Playwright ผ่าน
-- **Docker** (`DockerService`+`DockerController`+view): list/start/stop/restart/remove container, logs, pull/remove image — ผ่าน nexpanel-run (escape id, whitelist action), graceful degrade ถ้าไม่มี docker/daemon
-- **WordPress** (`WordPressController`): one-click = สร้าง DB+user (MysqlService) + vhost (NginxService) + โหลด WP core + เขียน wp-config.php (salts สุ่ม) + SSL ทางเลือก; list WP sites ที่ติดตั้งแล้ว
-- เมนูอยู่ใต้ TOOLS ใน sidebar; deploy ขึ้น VM ด้วยการ **dogfood ปุ่มอัปเดตเอง** (a781f7d→3541433 ผ่าน Playwright) แล้วเทสหน้า/graceful/validation ผ่าน 11/11
-
 ### 🛡️ Security audit + hardening (commit e61e185) — เทสด้วย Playwright แล้ว
 เทสทั้ง source (25 controllers) + live (Playwright ขับ browser จริง 38 เคส ผ่านหมด):
 - **C1 (critical):** ปิด `/register` สาธารณะ — เดิมใครก็สมัครได้สิทธิ์ root; สร้าง admin ผ่าน `php artisan nexpanel:user <email>` แทน (ยืนยัน live: /register = 404)
