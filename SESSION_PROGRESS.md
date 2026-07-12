@@ -59,6 +59,17 @@ cd /var/www/nexpanel && sudo bash update.sh
 ### Security (ufw) — ใหม่
 - **Firewall tab** — เปิด/ปิดพอร์ต + rule ตาม IP ผ่าน ufw
 
+### 🛡️ Security audit + hardening (commit e61e185) — เทสด้วย Playwright แล้ว
+เทสทั้ง source (25 controllers) + live (Playwright ขับ browser จริง 38 เคส ผ่านหมด):
+- **C1 (critical):** ปิด `/register` สาธารณะ — เดิมใครก็สมัครได้สิทธิ์ root; สร้าง admin ผ่าน `php artisan nexpanel:user <email>` แทน (ยืนยัน live: /register = 404)
+- **C2/H3:** docRoot ต้องอยู่ใต้ `/var/www` + php `X.Y` — กัน nginx config injection + `chown -R /etc` brick
+- **C3/H1/H2:** File Manager — ขยาย protected paths (+base_path), chmod/rename/move เช็ค protected (ยืนยัน live: chmod/rename/move `/etc` + delete `/boot` = 403)
+- **M2:** extract as root ใส่ `--no-same-owner --no-same-permissions --no-absolute-names` กัน setuid-root + zip/tar-slip
+- **M1:** service layer มี `assertIdentifier` (`^[A-Za-z0-9_]+$`) + charset regex อยู่แล้ว = SQLi ปลอดภัยตั้งแต่ต้น; เพิ่ม validate ที่ controller เป็น defense-in-depth
+- **ปลอดภัยดีอยู่แล้ว:** login rate-limit (Breeze), เปลี่ยนรหัสเช็ค current, CSRF ครบ, API key encrypted, FirewallService (escapeshellarg+int cast+verb whitelist+กันล็อกตัวเอง), backup/recycle ใช้ basename()
+- **by design (เหมือน aaPanel):** Web Terminal + AI shell = root ได้ → หลังปิด register แล้ว "login ได้ = admin ที่เชื่อถือได้"
+- ⚠️ **Playwright test อยู่ที่ scratchpad** (test.mjs / test2.mjs) — ใช้ admin@nexpanel.local
+
 ### UI/UX fixes + In-panel updater — ใหม่ล่าสุด
 - **รวม layout เหลืออันเดียว**: dashboard เดิมใช้ `components/layouts/app.blade.php` (เมนูเก่า ขาด Security/Logs) → เปลี่ยนเป็น `@extends('layouts.app')` เหมือนหน้าอื่น เมนูครบทุกหน้าแล้ว (ไฟล์ component layout กลายเป็น dead ไม่มีใครใช้)
 - **แก้ theme flash (จอขาวแวปตอนเปลี่ยนหน้า)**: เพิ่ม inline script ใน `<head>` ของ layouts/app + guest ที่ใส่ class `dark` + bg สีเข้มก่อน paint (กัน FOUC จาก Alpine ที่โหลดทีหลัง)
