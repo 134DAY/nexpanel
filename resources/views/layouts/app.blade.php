@@ -127,6 +127,16 @@
                 <span class="ml-auto px-2 py-0.5 text-[10px] font-bold rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white">AI</span>
             </a>
 
+            <a href="/docker" class="sidebar-item {{ request()->is('docker*') ? 'active' : '' }} flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium {{ request()->is('docker*') ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white' }}">
+                <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.75l-1.5 13.5A2.25 2.25 0 0116.5 22.5h-9a2.25 2.25 0 01-2.25-2.25L3.75 6.75M9.75 10.5v6m4.5-6v6M3 6.75h18M16.5 6.75V4.5a1.5 1.5 0 00-1.5-1.5h-6a1.5 1.5 0 00-1.5 1.5v2.25"/></svg>
+                <span>Docker</span>
+            </a>
+
+            <a href="/wordpress" class="sidebar-item {{ request()->is('wordpress*') ? 'active' : '' }} flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium {{ request()->is('wordpress*') ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white' }}">
+                <svg class="w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-8.06 10c0-1.17.25-2.28.7-3.28l3.86 10.58A8.006 8.006 0 013.94 12zM12 20c-.79 0-1.55-.12-2.28-.33l2.42-7.04 2.48 6.79c.02.04.03.08.05.11A7.96 7.96 0 0112 20zm1.11-11.75c.49-.03.93-.08.93-.08.43-.05.38-.69-.05-.66 0 0-1.31.1-2.16.1-.79 0-2.13-.11-2.13-.11-.43-.02-.48.64-.05.66 0 0 .41.05.86.08l1.27 3.48-1.78 5.35-2.97-8.83c.49-.02.93-.08.93-.08.43-.05.38-.69-.05-.66 0 0-1.3.1-2.15.1-.15 0-.33 0-.52-.01A7.994 7.994 0 0112 4c2.02 0 3.86.76 5.25 2.02-.03 0-.07-.01-.11-.01-.79 0-1.35.69-1.35 1.43 0 .66.38 1.22.79 1.88.31.53.66 1.22.66 2.21 0 .69-.26 1.48-.61 2.59l-.8 2.66-2.92-8.53zm5.42 9.05l2.44-7.05c.46-1.14.61-2.05.61-2.86 0-.29-.02-.56-.05-.82.62 1.14.98 2.44.98 3.83 0 2.95-1.6 5.52-3.98 6.9z"/></svg>
+                <span>WordPress</span>
+            </a>
+
             <p class="px-3 mt-6 mb-3 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em]">System</p>
 
             <a href="/services" class="sidebar-item {{ request()->is('services*') ? 'active' : '' }} flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium {{ request()->is('services*') ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white' }}">
