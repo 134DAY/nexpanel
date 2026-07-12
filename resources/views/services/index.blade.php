@@ -70,9 +70,9 @@
     <div class="space-y-3">
         <template x-for="svc in services" :key="svc.id">
             <div class="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-5 hover:shadow-md dark:hover:shadow-none transition-all">
-                <div class="flex items-center justify-between">
+                <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     {{-- Left: Icon + Info --}}
-                    <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-4 min-w-0">
                         {{-- Service Icon --}}
                         <div class="w-12 h-12 rounded-xl flex items-center justify-center"
                              :class="svc.status === 'running'

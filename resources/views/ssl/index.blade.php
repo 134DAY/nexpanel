@@ -58,7 +58,7 @@
     <div class="space-y-3">
         @forelse($certs as $cert)
         <div class="bg-white dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-slate-800/60 p-5 hover:border-cyan-300 dark:hover:border-cyan-500/30 transition-colors">
-            <div class="flex items-center justify-between">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div class="flex items-center gap-4">
                     <div class="w-12 h-12 rounded-xl flex items-center justify-center {{ $cert['status'] === 'valid' ? 'bg-emerald-50 dark:bg-emerald-500/10' : ($cert['status'] === 'expiring_soon' ? 'bg-amber-50 dark:bg-amber-500/10' : 'bg-red-50 dark:bg-red-500/10') }}">
                         <svg class="w-6 h-6 {{ $cert['status'] === 'valid' ? 'text-emerald-500' : ($cert['status'] === 'expiring_soon' ? 'text-amber-500' : 'text-red-500') }}" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>

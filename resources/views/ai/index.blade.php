@@ -6,8 +6,11 @@
 @section('content')
 <div x-data="aiChat()" x-init="init()" class="flex relative h-[calc(100vh-8rem)] -m-4 sm:-m-6">
 
+    {{-- Mobile backdrop for the history overlay --}}
+    <div x-show="showHistory" x-cloak @click="showHistory = false" class="fixed inset-0 bg-black/50 z-10 md:hidden"></div>
+
     <!-- Chat History Sidebar -->
-    <div class="w-72 shrink-0 bg-slate-50 dark:bg-white/5 border-r border-slate-200 dark:border-white/10 flex flex-col absolute inset-y-0 left-0 z-20 shadow-2xl md:static md:z-auto md:shadow-none"
+    <div class="w-72 shrink-0 bg-white dark:bg-surface-900 md:bg-slate-50 md:dark:bg-white/5 border-r border-slate-200 dark:border-white/10 flex flex-col absolute inset-y-0 left-0 z-20 shadow-2xl md:static md:z-auto md:shadow-none"
          x-show="showHistory" x-transition>
 
         <!-- Sidebar Header -->
