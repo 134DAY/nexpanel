@@ -93,6 +93,7 @@
             </div>
             <div class="text-2xl font-extrabold text-slate-800 dark:text-white mb-1" id="uptime-value">--</div>
             <div class="text-xs text-slate-400 dark:text-slate-500" id="server-info">Loading...</div>
+            <div class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">IP: <span class="font-mono text-slate-500 dark:text-slate-300" id="server-ip">--</span></div>
         </div>
     </div>
 
@@ -220,6 +221,7 @@
                 document.getElementById('disk-bar').style.width = d.disk.percent + '%';
                 document.getElementById('uptime-value').textContent = d.uptime;
                 document.getElementById('server-info').textContent = d.hostname + ' · ' + d.os;
+                document.getElementById('server-ip').textContent = d.ip || 'N/A';
 
                 if (d.network) {
                     document.getElementById('net-rx').textContent = d.network.rx;

@@ -11,11 +11,11 @@ use Illuminate\Support\Facades\Process;
 /**
  * Runs AI-proposed actions after the user confirms them.
  *
- * Two execution paths (hybrid):
- *   - "tools": high-level operations dispatched to the panel's own vetted
- *     services (website/database/service/cron). Safe — no raw shell.
- *   - "shell": a fallback raw command, gated by SafetyGuard and run through a
- *     privileged, denylisted wrapper (/usr/local/bin/nexpanel-run).
+ * The AI may only propose high-level operations dispatched to the panel's own
+ * vetted services (website/database/service/cron/file). Raw shell execution is
+ * NOT exposed to the AI — a request for tool "shell" is rejected. (The panel's
+ * Web Terminal, where the operator types commands themselves, is a separate
+ * feature and is unaffected.)
  *
  * Every action is assessed for risk and must be confirmed by the user in the
  * chat UI before run() is called; every run is written to the audit log.
@@ -35,16 +35,14 @@ class AIExecutor
         'create_cron'     => 'caution',
         'read_file'       => 'safe',
         'write_file'      => 'caution',
-        'shell'           => 'caution',
     ];
 
     /** Assess an action's risk before it runs (drives the confirm card). */
     public static function assess(string $tool, array $args): array
     {
+        // Raw shell is intentionally not available to the AI. Reject it safely.
         if ($tool === 'shell') {
-            $s = SafetyGuard::assess($args['command'] ?? '');
-
-            return ['level' => $s['level'], 'allowed' => $s['allowed'], 'message' => $s['message']];
+            return ['level' => 'blocked', 'allowed' => false, 'message' => 'The shell tool is disabled — the AI cannot run raw commands.'];
         }
 
         if (! isset(self::TOOLS[$tool])) {
@@ -75,7 +73,6 @@ class AIExecutor
             'create_cron'     => "Add cron job: {$args['command']} ({$args['schedule']})",
             'read_file'       => "Read file {$args['path']}",
             'write_file'      => "Write file {$args['path']} (" . strlen($args['content'] ?? '') . " bytes)",
-            'shell'           => "Run: {$args['command']}",
             default           => $tool,
         };
     }
@@ -229,9 +226,6 @@ class AIExecutor
                 return $r['ok']
                     ? ['ok' => true, 'output' => 'Wrote ' . strlen($content) . " bytes to {$path} (as root)."]
                     : ['ok' => false, 'output' => "Cannot write {$path}: " . $r['output']];
-
-            case 'shell':
-                return self::shellRoot($args['command'] ?? '');
 
             default:
                 return ['ok' => false, 'output' => "Unknown action: {$tool}"];

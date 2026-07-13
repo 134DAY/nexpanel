@@ -13,6 +13,7 @@ class ServerMetricsService
             'ram'      => $this->getMemoryUsage(),
             'disk'     => $this->getDiskUsage(),
             'network'  => $this->getNetworkUsage(),
+            'ip'       => $this->getPrimaryIp(),
             'uptime'   => $this->getUptime(),
             'hostname' => trim(Process::run('hostname')->output()),
             'os'       => trim(Process::run('lsb_release -ds 2>/dev/null || cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d \'"\' | head -1')->output()) ?: 'Linux',
@@ -101,6 +102,29 @@ class ServerMetricsService
         }
 
         return ['rx' => $rx, 'tx' => $tx];
+    }
+
+    /**
+     * The machine's primary (outbound) IPv4 address, skipping loopback.
+     * Returns 'N/A' when it cannot be determined — never throws.
+     */
+    public function getPrimaryIp(): string
+    {
+        // Preferred: the source address the kernel uses for the default route.
+        $out = trim((string) Process::run('ip -4 route get 1.1.1.1 2>/dev/null')->output());
+        if ($out !== '' && preg_match('/\bsrc\s+(\d+\.\d+\.\d+\.\d+)/', $out, $m) && $m[1] !== '127.0.0.1') {
+            return $m[1];
+        }
+
+        // Fallback: first non-loopback address from `hostname -I`.
+        $all = trim((string) Process::run('hostname -I 2>/dev/null')->output());
+        foreach (preg_split('/\s+/', $all) as $addr) {
+            if (preg_match('/^\d+\.\d+\.\d+\.\d+$/', $addr) && $addr !== '127.0.0.1') {
+                return $addr;
+            }
+        }
+
+        return 'N/A';
     }
 
     public function getUptime(): string
